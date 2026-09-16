@@ -1,0 +1,19 @@
+.venv/
+__pycache__/
+*.py[cod]
+*.log
+
+outputs/flir-live.*
+outputs/flir-capture.log
+outputs/flir-viewer-settings.json
+outputs/flir-storage-settings.json
+outputs/FLIR Kayitlari/
+outputs/FLIR_DVR/
+work/captures/
+
+*.bin
+*.raw
+*.raw16
+*.sqlite3
+*.tmp
+
