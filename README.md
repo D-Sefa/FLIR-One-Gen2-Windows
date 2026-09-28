@@ -14,7 +14,9 @@ mobile application.
 - Temperature under the pointer, scene minimum/centre/maximum and measurement points
 - Measurement history, hover readout, graph pause/zoom and continuous DVR archive
 - Iron, Lava, Rainbow, White-hot and Black-hot palettes
-- FLIR HEQ, wall-detail, background-relative, scene, percentile and manual scaling
+- Auto plateau HEQ, Detail CLAHE, Linear auto, exact Manual and background-relative scaling
+- Fine tone/span, contrast, minimum span, detail and edge-preserving denoise controls
+- Smooth or native-pixel display; separate tuning and display resets
 - Emissivity, reflected temperature and calibration-offset controls
 - Separate **Reset** actions for display and temperature/radiometry settings
 - Responsive FPS readout based on the latest two seconds
@@ -22,6 +24,11 @@ mobile application.
 - One-click Windows launcher and first-run dependency/driver check
 
 ## Quick Start
+
+Download the [latest release](https://github.com/D-Sefa/FLIR-One-Gen2-Windows/releases/latest).
+This is a Python source distribution with `setup.cmd`, not a standalone EXE.
+When upgrading, close the viewer and rerun `setup.cmd` to install NumPy.
+Keep your existing `outputs/FLIR_DVR` folder if you want to retain recordings.
 
 1. Read the [USB connection and complete user guide](docs/USER_GUIDE.md).
 2. Connect and power the camera.
@@ -57,11 +64,19 @@ See [CONTRIBUTING.md](CONTRIBUTING.md).
 - Tested with a FLIR ONE Gen 2 Lightning/iOS unit running Rosebud firmware `0.4.27`.
 - Thermal capture and analysis work; visible/optical and MSX do not yet work.
 - Temperature accuracy depends on the camera calibration and selected radiometric settings.
+- Display processing does not improve the sensor's physical resolution or calibration.
+- The host-side AGC is independently implemented, not FLIR's proprietary image pipeline.
+- Detail mode is locally adaptive: equal colours need not mean equal temperatures.
 - A stable battery/power source and reliable USB data connection are essential.
 - This is an independent community project and is not affiliated with or endorsed by FLIR.
+
+## Development and validation
+
+See [display algorithms and validation](docs/DISPLAY_PROCESSING.md) and
+[release notes](CHANGELOG.md). Run `python -m unittest discover -s tests -v`
+inside the setup environment for the offline suite (the UI test requires Tk).
 
 ## License
 
 Source code is released under the [MIT License](LICENSE). FLIR and FLIR ONE are
 trademarks of their respective owner.
-

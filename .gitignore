@@ -17,3 +17,6 @@ work/captures/
 *.sqlite3
 *.tmp
 *.zip
+*.bak*
+outputs/flir-performance.json
+outputs/agc-comparison.png

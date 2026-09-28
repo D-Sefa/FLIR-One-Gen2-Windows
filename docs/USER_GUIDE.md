@@ -107,13 +107,48 @@ Rosebud configuration session are established.
 - **Palette** chooses the colour map.
 - **Scale** chooses how temperatures map to colours.
 - **Tone** moves the palette midpoint without changing measured temperatures.
-- **Thermal span** changes colour sensitivity. A smaller percentage emphasises
+- **Display span** changes colour sensitivity. A smaller percentage emphasises
   small temperature differences; a larger percentage covers a wider range.
 - **Reset** restores only display defaults.
+- **Reset tuning** resets tone/span, contrast, minimum span, detail, denoise and
+  interpolation without changing the palette, selected mode or radiometry.
+- Numeric fields and sliders support the mouse wheel and arrow keys. Hold Shift
+  for a ten-times larger step. Values are saved between sessions.
+
+| Scale | Best use | Behaviour |
+|---|---|---|
+| Auto | General inspection | Global plateau HEQ, bounded contrast amplification |
+| Detail | PCB and low-contrast structure | Locally adaptive, contrast-limited histogram equalization |
+| Linear auto | Walls and natural temperature gradients | Adaptive linear temperature range |
+| Manual | Comparing scenes at the same scale | Fixed minimum/maximum in Celsius, independent of scene extrema |
+| Background relative | Locating warm objects | Learns a background interval and renders it dark |
+
+**Contrast** (Auto/Detail) controls histogram clipping, 1.0–4.0. Higher values
+show more contrast but may amplify noise. Start at 1.5.
+**Min span °C** prevents almost uniform scenes from filling the entire palette
+with sensor noise. Start at 1.5 °C; lower it deliberately for small differences.
+**Detail %** blends local CLAHE into the global mapping. Start at 35%; 100% is
+not necessarily better. Equal colours in different regions may correspond to
+different temperatures in this mode; use point measurements for comparison.
+**Denoise %** blends a small edge-preserving spatial filter before colour mapping.
+It is display-only, adds no frame queue and is not used in Manual mode.
+**Interpolation** selects a smooth enlarged picture or visible native pixels.
+It does not increase true sensor resolution.
+
+In Manual, **Fit scene** copies the current scene min/max into the range and
+resets tone/span. The entries are always Celsius even when readings use °F.
+At neutral tone and 100% span they are the exact black/white endpoints.
+Tone/span adjustments change the effective endpoints shown beneath the image.
+For Auto/Detail the displayed limits are the nonlinear AGC domain, not a linear
+colour thermometer. Increasing sensitivity can amplify noise; it cannot improve NETD.
 
 Scale-specific controls are shown only when relevant. Manual mode exposes the
 manual temperature range. Background-relative mode exposes deadband, minimum
 hot span and learning time.
+
+The legacy settings `FLIR HEQ`, `Wall detail`, `Scene min–max` and percentile
+modes migrate to Auto or Linear auto. Background relative and Manual are retained.
+No camera firmware, USB initialization or iAP2 settings are changed by these controls.
 
 ### Temperature / radiometry
 
@@ -170,4 +205,3 @@ This is the current known limitation, not a Zadig configuration error. Thermal
 records currently arrive with `jpg_size = 0`. See the help-wanted section in
 the main README if you can contribute a verified Gen 2 iOS capture or protocol
 implementation.
-

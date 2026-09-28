@@ -46,7 +46,7 @@ if errorlevel 1 (
   exit /b 1
 )
 
-".venv\Scripts\python.exe" -c "import usb.core, libusb_package; from PIL import Image; print('Python dependencies: OK')"
+".venv\Scripts\python.exe" -c "import usb.core, libusb_package, numpy; from PIL import Image; print('Python dependencies: OK')"
 if errorlevel 1 exit /b 1
 
 echo.
@@ -54,4 +54,3 @@ powershell -NoProfile -ExecutionPolicy Bypass -File "tools\driver_check.ps1"
 echo.
 echo Setup completed. Read docs\USER_GUIDE.md before changing USB drivers.
 pause
-

@@ -35,9 +35,9 @@ def publish_thermal_frame(record):
     global _last_good_span, _ffc_skip_frames, _ffc_cooldown_until
     values = []
     for y in range(120):
-        for x in range(160):
-            offset = 32 + (y * 164 + x) * 2 + (4 if x >= 80 else 0)
-            values.append(struct.unpack_from("<H", record, offset)[0])
+        row_offset = 32 + y * 328
+        values.extend(struct.unpack_from("<80H", record, row_offset))
+        values.extend(struct.unpack_from("<80H", record, row_offset + 164))
     # A handful of invalid/dead pixels can momentarily jump to 10k-60k and
     # crush the whole picture into blue.  Use robust scene percentiles for
     # display while preserving the original 16-bit samples internally.
@@ -70,6 +70,11 @@ def publish_thermal_frame(record):
         print(f"[{now()}] FFC settling frame ignored", flush=True)
         return None
     _last_good_span = span
+    if os.environ.get("FLIR_SKIP_PPM") == "1":
+        # The desktop viewer renders RAW16 itself; avoid a second false-colour
+        # render and disk write in the USB reader's critical path.
+        atomic_write(LIVE_RAW, struct.pack("<19200H", *values))
+        return lo, hi
     rgb = bytearray(120 * 160 * 3)
     for y in range(120):
         for x in range(160):
@@ -116,19 +121,95 @@ def usb_write(dev, endpoint, data, timeout=500):
             time.sleep(0.03 * (attempt + 1))
 
 
+def pop_complete_ep85_frame(frame_stream):
+    """Remove and return one complete FrameSize-delimited EP85 record."""
+    while True:
+        start = frame_stream.find(FRAME_MAGIC)
+        if start < 0:
+            if len(frame_stream) > len(FRAME_MAGIC) - 1:
+                del frame_stream[: -(len(FRAME_MAGIC) - 1)]
+            return None
+        if start:
+            del frame_stream[:start]
+        if len(frame_stream) < 28:
+            return None
+
+        frame_size, thermal_size, jpeg_size, status_size = struct.unpack_from(
+            "<4I", frame_stream, 8
+        )
+        known_payload = thermal_size + jpeg_size + status_size
+        if frame_size == 0 or known_payload > frame_size:
+            # The header cannot describe a valid record. Drop this magic and
+            # resynchronise instead of consuming bytes from the next frame.
+            del frame_stream[: len(FRAME_MAGIC)]
+            continue
+
+        total = 28 + frame_size
+        if len(frame_stream) < total:
+            return None
+
+        record = bytes(frame_stream[:total])
+        del frame_stream[:total]
+        return record, (frame_size, thermal_size, jpeg_size, status_size)
+
+
+def inspect_ep85_frame(record):
+    """Return full-record diagnostics, including an optional JPEG scan."""
+    if len(record) < 28:
+        raise ValueError("short frame record")
+    frame_size, thermal_size, jpeg_size, status_size = struct.unpack_from(
+        "<4I", record, 8
+    )
+    known_payload = thermal_size + jpeg_size + status_size
+    if known_payload > frame_size:
+        raise ValueError(
+            f"section sizes exceed FrameSize: {known_payload} > {frame_size}"
+        )
+    expected = 28 + frame_size
+    if len(record) < expected:
+        raise ValueError(f"frame length mismatch: {len(record)} < {expected}")
+
+    if jpeg_size:
+        scan_start = 28 + thermal_size
+        scan_end = scan_start + jpeg_size
+        scan_scope = "declared-jpeg"
+    else:
+        scan_start = 0
+        scan_end = expected
+        scan_scope = "full-record"
+    soi = record.find(b"\xff\xd8", scan_start, scan_end)
+    eoi = record.find(b"\xff\xd9", soi + 2, scan_end) if soi >= 0 else -1
+
+    return {
+        "header_hex": record[:28].hex(" "),
+        "frame_size": frame_size,
+        "thermal_size": thermal_size,
+        "jpeg_size": jpeg_size,
+        "status_size": status_size,
+        "residual": frame_size - known_payload,
+        "jpeg_scan_scope": scan_scope,
+        "jpeg_soi": soi,
+        "jpeg_eoi": eoi,
+    }
+
+
 def publish_frame(record):
     """Publish thermal samples plus the optional 640x480 visual JPEG."""
     if len(record) < 28:
         raise ValueError("short frame record")
     frame_size, thermal_size, jpeg_size, status_size = struct.unpack_from("<4I", record, 8)
     payload_size = thermal_size + jpeg_size + status_size
-    expected = 28 + payload_size
+    if payload_size > frame_size:
+        raise ValueError(
+            f"section sizes exceed FrameSize: {payload_size} > {frame_size}"
+        )
+    expected = 28 + frame_size
     if len(record) < expected:
         raise ValueError(f"frame length mismatch: {len(record)} < {expected}")
-    if frame_size != payload_size:
+    if frame_size > payload_size:
         print(
             f"[{now()}] FRAME size disagreement: declared={frame_size} "
-            f"sections={payload_size}",
+            f"sections={payload_size} residual={frame_size - payload_size}",
             flush=True,
         )
     jpeg_start = 28 + thermal_size
@@ -332,6 +413,7 @@ while True:
     frame_chunks = 0
     frame_stream = bytearray()
     live_frames = 0
+    first_full_frame_logged = False
     last_frame_at = time.monotonic()
     frame_restarts = 0
     last_keepalive_at = time.monotonic()
@@ -358,40 +440,32 @@ while True:
                             frame_bytes += len(frame)
                             frame_stream.extend(frame)
                             while True:
-                                start = frame_stream.find(FRAME_MAGIC)
-                                if start < 0:
-                                    if len(frame_stream) > 3:
-                                        del frame_stream[:-3]
+                                completed = pop_complete_ep85_frame(frame_stream)
+                                if completed is None:
                                     break
-                                if start:
-                                    del frame_stream[:start]
-                                if len(frame_stream) < 28:
-                                    break
-                                frame_size = struct.unpack_from("<I", frame_stream, 8)[0]
-                                thermal_size = struct.unpack_from("<I", frame_stream, 12)[0]
-                                jpeg_size = struct.unpack_from("<I", frame_stream, 16)[0]
-                                status_size = struct.unpack_from("<I", frame_stream, 20)[0]
-                                payload_size = thermal_size + jpeg_size + status_size
-                                total = 28 + payload_size
-                                # Captured Gen2 records declare frame_size as the
-                                # complete payload length (thermal + JPEG + status).
-                                # Keep the section sizes authoritative so a bad
-                                # declaration cannot splice two adjacent records.
-                                if frame_size != payload_size:
+                                record, header = completed
+                                frame_size, thermal_size, jpeg_size, status_size = header
+                                total = len(record)
+                                if not first_full_frame_logged:
+                                    info = inspect_ep85_frame(record)
+                                    (CAPTURE_DIR / f"frame85-full-{stamp}.bin").write_bytes(record)
+                                    signature = (
+                                        f"found SOI={info['jpeg_soi']} EOI={info['jpeg_eoi']}"
+                                        if info["jpeg_soi"] >= 0 and info["jpeg_eoi"] >= 0
+                                        else "not-found"
+                                    )
                                     print(
-                                        f"[{now()}] FRAME header mismatch: declared={frame_size} "
-                                        f"sections={payload_size}",
+                                        f"[{now()}] FIRST FULL EP85 "
+                                        f"HEADER28={info['header_hex']} "
+                                        f"FrameSize={info['frame_size']} "
+                                        f"ThermalSize={info['thermal_size']} "
+                                        f"JpgSize={info['jpeg_size']} "
+                                        f"StatusSize={info['status_size']} "
+                                        f"Residual={info['residual']} "
+                                        f"JPEG({info['jpeg_scan_scope']})={signature}",
                                         flush=True,
                                     )
-                                if total < 39392 or total > 1000000:
-                                    del frame_stream[:4]
-                                    continue
-                                if len(frame_stream) < total:
-                                    break
-                                record = bytes(frame_stream[:total])
-                                del frame_stream[:total]
-                                if live_frames == 0:
-                                    (CAPTURE_DIR / f"frame85-{stamp}.bin").write_bytes(record)
+                                    first_full_frame_logged = True
                                 last_frame_at = time.monotonic()
                                 published = publish_frame(record)
                                 if published is None:
@@ -462,7 +536,7 @@ while True:
                     last_keepalive_at = time.monotonic()
                     print(f"[{now()}] KEEPALIVE autoFFC=true sent", flush=True)
                 try:
-                    raw = bytes(dev.read(EP_IN, 65535, timeout=100))
+                    raw = bytes(dev.read(EP_IN, 65535, timeout=1 if frame_started else 100))
                 except usb.core.USBTimeoutError:
                     continue
                 except usb.core.USBError as exc:

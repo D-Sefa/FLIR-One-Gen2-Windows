@@ -7,7 +7,9 @@ from tkinter import filedialog, messagebox, ttk
 
 ROOT = pathlib.Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "work" / "pydeps"))
+sys.path.insert(0, str(ROOT / "work"))
 from PIL import Image, ImageChops, ImageDraw, ImageEnhance, ImageFilter, ImageOps, ImageTk
+from flir_display import ToneMapper, MODES, migrate_mode
 
 CAPTURE = ROOT / "work" / "flir_iap2_frame.py"
 LIVE_RAW = ROOT / "outputs" / "flir-live.raw16"
@@ -154,13 +156,14 @@ class Viewer:
         if unit not in ("°C","°F"):unit="°C"
         view_mode=vs.get("view_mode","Thermal")
         if view_mode not in ("Thermal","Visible","Overlay","MSX edges"):view_mode="Thermal"
-        scale_mode=vs.get("scale_mode","FLIR HEQ")
-        # Migrate our earlier experimental auto modes to the documented
-        # FLIR/Lepton-style Histogram Equalization path.
-        if scale_mode in ("Auto (2–98%)","Auto adaptive"):
-            scale_mode="FLIR HEQ"
-        if scale_mode not in ("FLIR HEQ","Wall detail","Auto (2–98%)","Background relative","Scene min–max","Manual"):
-            scale_mode="FLIR HEQ"
+        scale_mode=migrate_mode(vs.get("scale_mode","Auto"))
+        self.tone_mapper=ToneMapper()
+        self.contrast_var=tk.StringVar(value=str(vs.get("agc_contrast","1.5")))
+        self.min_span_var=tk.StringVar(value=str(vs.get("agc_min_span","1.5")))
+        self.detail_var=tk.StringVar(value=str(vs.get("agc_detail","35")))
+        self.denoise_var=tk.StringVar(value=str(vs.get("agc_denoise","30")))
+        interp=vs.get("display_interpolation","Smooth")
+        self.interpolation_var=tk.StringVar(value=interp if interp in ("Smooth","Native pixels") else "Smooth")
 
         self.palette_var=tk.StringVar(value=palette); self.unit_var=tk.StringVar(value=unit)
         self.view_mode=tk.StringVar(value=view_mode); self.overlay_alpha=tk.IntVar(value=int(clamp(float(vs.get("overlay_alpha",35)),0,100)))
@@ -194,17 +197,6 @@ class Viewer:
         self.background_low=None
         self.background_high=None
         self.background_scene_resets=0
-
-        # FLIR/Lepton-style display AGC state.  This affects only the 8-bit
-        # display mapping; radiometric temperatures and RAW16 stay untouched.
-        self.heq_bins=256
-        self.heq_linear_percent=20.0
-        self.heq_dampening_n=64.0
-        self.heq_prev_lut=None
-        self.heq_prev_low=None
-        self.heq_prev_high=None
-        self.wall_prev_low_c=None
-        self.wall_prev_high_c=None
 
         self.smooth_var=tk.BooleanVar(value=bool(vs.get("smooth_3x3",True))); self.status=tk.StringVar(value="Starting iAP2/frame capture…")
         self.hover_text=tk.StringVar(value="Move the pointer over the thermal image"); self.scene_text=tk.StringVar(value="Min —   Center —   Max —")
@@ -255,6 +247,11 @@ class Viewer:
             "manual_max":self.manual_max.get(),
             "display_tone":int(self.tone_var.get()),
             "thermal_span":int(self.thermal_span_var.get()),
+            "agc_contrast":self.contrast_var.get(),
+            "agc_min_span":self.min_span_var.get(),
+            "agc_detail":self.detail_var.get(),
+            "agc_denoise":self.denoise_var.get(),
+            "display_interpolation":self.interpolation_var.get(),
             "background_deadband":self.background_deadband_var.get(),
             "background_hot_span":self.background_hot_span_var.get(),
             "background_learning_seconds":self.background_learning_var.get(),
@@ -294,6 +291,7 @@ class Viewer:
             self.emissivity_var,self.reflected_var,self.temp_offset_var,
             self.scale_mode,self.manual_min,self.manual_max,
             self.tone_var,self.thermal_span_var,
+            self.contrast_var,self.min_span_var,self.detail_var,self.denoise_var,self.interpolation_var,
             self.background_deadband_var,self.background_hot_span_var,
             self.background_learning_var,self.smooth_var
         ):
@@ -561,7 +559,7 @@ class Viewer:
         ttk.Label(display_box,text="Scale").grid(row=0,column=2,sticky="w",padx=(0,6),pady=5)
         self.scale_combo=ttk.Combobox(
             display_box,textvariable=self.scale_mode,
-            values=["FLIR HEQ","Wall detail","Auto (2–98%)","Background relative","Scene min–max","Manual"],
+            values=MODES,
             state="readonly",width=17
         )
         self.scale_combo.grid(row=0,column=3,sticky="ew",padx=(0,8),pady=5)
@@ -574,7 +572,7 @@ class Viewer:
         self.tone_scale=ttk.Scale(tone_wrap,from_=-100,to=100,variable=self.tone_var)
         self.tone_scale.grid(row=0,column=1,sticky="ew")
         ttk.Label(tone_wrap,textvariable=self.tone_label_var,width=5,anchor="e").grid(row=0,column=2,padx=(5,16))
-        ttk.Label(tone_wrap,text="Thermal span").grid(row=0,column=3,sticky="w",padx=(0,6))
+        ttk.Label(tone_wrap,text="Display span").grid(row=0,column=3,sticky="w",padx=(0,6))
         self.thermal_span_scale=ttk.Scale(tone_wrap,from_=25,to=400,variable=self.thermal_span_var)
         self.thermal_span_scale.grid(row=0,column=4,sticky="ew")
         ttk.Label(tone_wrap,textvariable=self.thermal_span_label_var,width=6,anchor="e").grid(row=0,column=5,padx=(5,0))
@@ -587,6 +585,29 @@ class Viewer:
         self.manual_max_entry=ttk.Entry(self.manual_wrap,textvariable=self.manual_max,width=7)
         self.manual_max_entry.pack(side="left")
         ttk.Label(self.manual_wrap,text=" °C").pack(side="left")
+        ttk.Button(self.manual_wrap,text="Fit scene",command=self.fit_manual_range).pack(side="left",padx=8)
+
+        self.agc_wrap=ttk.Frame(display_box)
+        self.agc_controls={}
+        for title,var,step,lower,upper,digits in (
+            ("Contrast",self.contrast_var,.1,1,4,1),
+            ("Min span °C",self.min_span_var,.1,.1,20,1),
+            ("Detail %",self.detail_var,5,0,100,0),
+            ("Denoise %",self.denoise_var,5,0,100,0),
+        ):
+            wrap=ttk.Frame(self.agc_wrap)
+            ttk.Label(wrap,text=title).pack(side="left",padx=(0,4))
+            entry=ttk.Entry(wrap,textvariable=var,width=5)
+            entry.pack(side="left",padx=(0,12))
+            self.bind_numeric_control(entry,var,step,lower,upper,digits)
+            self.agc_controls[title]=wrap
+        finishing=ttk.Frame(display_box)
+        finishing.grid(row=3,column=0,columnspan=4,sticky="ew",padx=8,pady=(0,5))
+        ttk.Label(finishing,text="Interpolation").pack(side="left",padx=(0,6))
+        ttk.Combobox(finishing,textvariable=self.interpolation_var,values=("Smooth","Native pixels"),state="readonly",width=13).pack(side="left")
+        ttk.Button(finishing,text="Reset tuning",command=self.reset_display_tuning).pack(side="right")
+        self.scale_help=tk.StringVar()
+        ttk.Label(display_box,textvariable=self.scale_help,wraplength=620).grid(row=4,column=0,columnspan=4,sticky="w",padx=8,pady=(0,5))
 
         self.bg_wrap=ttk.Frame(display_box)
         ttk.Label(self.bg_wrap,text="Deadband").pack(side="left")
@@ -668,16 +689,16 @@ class Viewer:
         ttk.Radiobutton(options,text="°C",value="°C",variable=self.unit_var).pack(side="left")
         ttk.Radiobutton(options,text="°F",value="°F",variable=self.unit_var).pack(side="left")
 
-        self.bind_numeric_control(self.manual_min_entry,self.manual_min,0.5,-1000,2000,1)
-        self.bind_numeric_control(self.manual_max_entry,self.manual_max,0.5,-1000,2000,1)
+        self.bind_numeric_control(self.manual_min_entry,self.manual_min,0.1,-1000,2000,1)
+        self.bind_numeric_control(self.manual_max_entry,self.manual_max,0.1,-1000,2000,1)
         self.bind_numeric_control(self.deadband_entry,self.background_deadband_var,0.05,0,2,2)
         self.bind_numeric_control(self.hot_span_entry,self.background_hot_span_var,0.5,0.5,20,1)
         self.bind_numeric_control(self.learning_entry,self.background_learning_var,10,1,3600,0)
         self.bind_numeric_control(self.emissivity_entry,self.emissivity_var,0.01,0.01,1,2)
         self.bind_numeric_control(self.reflected_entry,self.reflected_var,0.5,-100,1000,1)
         self.bind_numeric_control(self.offset_entry,self.temp_offset_var,0.1,-100,100,1)
-        self.bind_numeric_control(self.tone_scale,self.tone_var,5,-100,100,0)
-        self.bind_numeric_control(self.thermal_span_scale,self.thermal_span_var,10,25,400,0)
+        self.bind_numeric_control(self.tone_scale,self.tone_var,1,-100,100,0)
+        self.bind_numeric_control(self.thermal_span_scale,self.thermal_span_var,1,25,400,0)
         self.scale_mode.trace_add("write",lambda *_:self.update_scale_controls())
         self.tone_var.trace_add("write",lambda *_:self.update_display_adjustment_labels())
         self.thermal_span_var.trace_add("write",lambda *_:self.update_display_adjustment_labels())
@@ -752,7 +773,7 @@ class Viewer:
         self.draw_graph(force=True)
         self.update_visible_controls(force=True)
 
-        for var in (self.palette_var,self.unit_var,self.emissivity_var,self.reflected_var,self.temp_offset_var,self.scale_mode,self.manual_min,self.manual_max,self.tone_var,self.thermal_span_var,self.background_deadband_var,self.background_hot_span_var,self.view_mode,self.overlay_alpha,self.visual_x,self.visual_y,self.visual_zoom):
+        for var in (self.palette_var,self.unit_var,self.emissivity_var,self.reflected_var,self.temp_offset_var,self.scale_mode,self.manual_min,self.manual_max,self.tone_var,self.thermal_span_var,self.background_deadband_var,self.background_hot_span_var,self.view_mode,self.overlay_alpha,self.visual_x,self.visual_y,self.visual_zoom,self.contrast_var,self.min_span_var,self.detail_var,self.denoise_var,self.interpolation_var):
             var.trace_add("write",lambda *_: self.render())
         for var in (self.emissivity_var,self.reflected_var,self.temp_offset_var,self.scale_mode):
             var.trace_add("write",lambda *_: self.reset_heq_state())
@@ -789,11 +810,10 @@ class Viewer:
     def reset_display_settings(self):
         """Restore only display/tone-mapping controls to their defaults."""
         self.palette_var.set("Iron")
-        self.scale_mode.set("FLIR HEQ")
+        self.scale_mode.set("Auto")
         self.manual_min.set("15")
         self.manual_max.set("35")
-        self.tone_var.set(0)
-        self.thermal_span_var.set(100)
+        self.reset_display_tuning()
         self.background_deadband_var.set("0.25")
         self.background_hot_span_var.set("3.0")
         self.background_learning_var.set("120")
@@ -822,10 +842,63 @@ class Viewer:
         except (AttributeError,tk.TclError):pass
         try:self.bg_wrap.grid_forget()
         except (AttributeError,tk.TclError):pass
+        self.agc_wrap.grid_forget()
+        for wrap in self.agc_controls.values():wrap.pack_forget()
         if mode=="Manual":
             self.manual_wrap.grid(row=2,column=0,columnspan=4,sticky="w",padx=8,pady=(0,6))
         elif mode=="Background relative":
             self.bg_wrap.grid(row=2,column=0,columnspan=4,sticky="w",padx=8,pady=(0,6))
+        else:
+            self.agc_wrap.grid(row=2,column=0,columnspan=4,sticky="w",padx=8,pady=(0,6))
+            names=["Min span °C","Denoise %"]
+            if mode in ("Auto","Detail"):names.insert(0,"Contrast")
+            if mode=="Detail":names.insert(2,"Detail %")
+            for name in names:self.agc_controls[name].pack(side="left")
+        self.scale_help.set({
+            "Auto":"Plateau HEQ: balanced contrast with limited noise amplification.",
+            "Detail":"Local CLAHE: reveals structure; equal colours may represent different temperatures.",
+            "Linear auto":"Adaptive linear range: consistent ordering, restrained surface contrast.",
+            "Manual":"Fixed temperature range. Tone / display span shift the effective limits shown below.",
+            "Background relative":"Highlights warm objects against a learned dark background.",
+        }.get(mode,""))
+
+    def reset_display_tuning(self):
+        self.tone_var.set(0)
+        self.thermal_span_var.set(100)
+        self.contrast_var.set("1.5")
+        self.min_span_var.set("1.5")
+        self.detail_var.set("35")
+        self.denoise_var.set("30")
+        self.interpolation_var.set("Smooth")
+        self.tone_mapper.reset()
+        self.render()
+
+    @staticmethod
+    def numeric_value(var,default):
+        try:
+            value=float(var.get())
+            return value if math.isfinite(value) else default
+        except (ValueError,TypeError,tk.TclError):return default
+
+    def fit_manual_range(self):
+        values=sorted(t for t in self.temperatures if math.isfinite(t))
+        if not values:return
+        low,high=values[0],values[-1]
+        self.manual_min.set(f"{math.floor(low*10)/10:.1f}")
+        self.manual_max.set(f"{max(math.ceil(high*10)/10,math.floor(low*10)/10+.1):.1f}")
+        self.tone_var.set(0)
+        self.thermal_span_var.set(100)
+
+    def display_levels(self,temperatures):
+        low=self.numeric_value(self.manual_min,15.)
+        high=self.numeric_value(self.manual_max,35.)
+        if high<=low:high=low+.1
+        return self.tone_mapper.map(temperatures,VIEW_W,VIEW_H,
+            mode=self.scale_mode.get(),low=low,high=high,
+            tone=self.numeric_value(self.tone_var,0),span=self.numeric_value(self.thermal_span_var,100),
+            contrast=self.numeric_value(self.contrast_var,1.5),min_span=self.numeric_value(self.min_span_var,1.5),
+            detail=self.numeric_value(self.detail_var,35),denoise=self.numeric_value(self.denoise_var,30),
+            temporal=not self.playback_mode)
 
     def update_display_adjustment_labels(self):
         try:self.tone_label_var.set(f"{int(round(float(self.tone_var.get()))):+d}")
@@ -849,7 +922,8 @@ class Viewer:
 
     def start_capture(self):
         self.capture_start_wall=time.time(); self.last_live_monotonic=time.monotonic(); self.capture_has_streamed=False
-        self.process=subprocess.Popen([sys.executable,"-u",str(CAPTURE)],cwd=str(ROOT),stdout=subprocess.PIPE,stderr=subprocess.STDOUT,text=True,bufsize=1,creationflags=self.capture_flags)
+        capture_env=os.environ.copy(); capture_env["FLIR_SKIP_PPM"]="1"
+        self.process=subprocess.Popen([sys.executable,"-u",str(CAPTURE)],cwd=str(ROOT),stdout=subprocess.PIPE,stderr=subprocess.STDOUT,text=True,bufsize=1,creationflags=self.capture_flags,env=capture_env)
         threading.Thread(target=self.read_output,args=(self.process,),daemon=True).start()
 
     def read_output(self,process):
@@ -1443,7 +1517,7 @@ class Viewer:
             row=sy*SRC_W
             for sx in range(SRC_W):
                 out[(SRC_W-1-sx)*VIEW_W+sy]=sensor[row+sx]
-        temps=[self.raw_to_c(v) for v in out]
+        temps=self.frame_temperatures(out)
         return sensor,out,temps
 
     def load_raw_blob(self,blob,update_background=True):
@@ -1902,6 +1976,24 @@ class Viewer:
                 f"Max {max(valid):.1f} °C • main viewer active"
             )
 
+    def frame_temperatures(self,values):
+        # Cache exact conversions across frames; invalidate on any calibration
+        # edit. RAW16 bounds this cache to at most 65,536 sensor values.
+        key=(self.emissivity_var.get(),self.reflected_var.get(),self.temp_offset_var.get())
+        if (getattr(self,"_temperature_frame_values",None) is values
+                and getattr(self,"_temperature_cache_key",None)==key):
+            return self._temperature_frame_result
+        if getattr(self,"_temperature_cache_key",None)!=key:
+            self._temperature_cache_key=key
+            self._temperature_cache={}
+        converted=self._temperature_cache
+        for v in set(values):
+            if v not in converted:converted[v]=self.raw_to_c(v)
+        result=[converted[v] for v in values]
+        self._temperature_frame_values=values
+        self._temperature_frame_result=result
+        return result
+
     def raw_to_c(self,raw14):
         try:
             e=clamp(float(self.emissivity_var.get()),.01,1.0)
@@ -2232,184 +2324,9 @@ class Viewer:
         u=u**0.65
         return int(round(34.0+221.0*u))
 
-    def flir_heq_levels(self,values,temporal=True):
-        """Return FLIR/Lepton-style HEQ 8-bit levels for one RAW16 frame.
-
-        Public FLIR documentation describes HEQ as the normal/high-contrast
-        AGC policy and documents temporal dampening of the transfer function.
-        This implementation follows that architecture:
-          * global scene histogram
-          * histogram equalization rather than linear percentile stretch
-          * 20% linear contribution (Lepton 3 documented default)
-          * temporal IIR dampening N=64 (documented default)
-
-        The exact proprietary handheld-camera pipeline is not public, so this
-        is a close documented-behaviour implementation rather than a byte-for-
-        byte clone.  Radiometric measurements are never modified.
-        """
-        if not values:
-            return [],None,None
-
-        vals=[int(v) for v in values]
-        ordered=sorted(vals)
-        n=len(ordered)
-        if n < 2:
-            return [128]*len(vals),ordered[0],ordered[0]
-
-        # Very small tails are ignored only to stop one defective/dead pixel
-        # from setting the entire histogram domain.  Unlike our old 2–98 %
-        # mapping, genuine small hot/cold objects remain inside the HEQ.
-        low=int(round(self._percentile_sorted(ordered,0.001)))
-        high=int(round(self._percentile_sorted(ordered,0.999)))
-        if high <= low:
-            low=ordered[0]
-            high=max(low+1,ordered[-1])
-
-        # Damp the input range as well as the LUT so the picture does not pump
-        # visibly when a hot component enters/leaves the frame.
-        if temporal and self.heq_prev_low is not None and self.heq_prev_high is not None:
-            a=self.heq_dampening_n/256.0
-            low=int(round(a*self.heq_prev_low+(1.0-a)*low))
-            high=int(round(a*self.heq_prev_high+(1.0-a)*high))
-            if high<=low:high=low+1
-
-        bins=self.heq_bins
-        span=max(1,high-low)
-        hist=[0.0]*bins
-
-        for v in vals:
-            if v<=low:
-                idx=0
-            elif v>=high:
-                idx=bins-1
-            else:
-                idx=int((v-low)*(bins-1)/span)
-            hist[idx]+=1.0
-
-        # Lepton 3 documents a default "linear percent" of 20%.  Conceptually
-        # this fills sparse/empty parts of the histogram so HEQ keeps some
-        # linear character instead of over-compressing gaps.
-        mean_count=len(vals)/bins
-        linear=self.heq_linear_percent/100.0
-        equalized=1.0-linear
-        eff=[equalized*h + linear*mean_count for h in hist]
-
-        total=sum(eff)
-        if total<=0:
-            current=[i*255.0/(bins-1) for i in range(bins)]
-        else:
-            current=[]
-            acc=0.0
-            for h in eff:
-                acc+=h
-                current.append(255.0*acc/total)
-
-        # FLIR/Lepton HEQ temporal dampening of the transformation function.
-        if temporal and self.heq_prev_lut is not None and len(self.heq_prev_lut)==bins:
-            a=self.heq_dampening_n/256.0
-            lut=[a*p+(1.0-a)*c for p,c in zip(self.heq_prev_lut,current)]
-        else:
-            lut=current
-
-        if temporal:
-            self.heq_prev_lut=lut
-            self.heq_prev_low=low
-            self.heq_prev_high=high
-
-        levels=[]
-        for v in vals:
-            if v<=low:
-                pos=0.0
-            elif v>=high:
-                pos=bins-1.0
-            else:
-                pos=(v-low)*(bins-1)/span
-            i=int(pos)
-            j=min(i+1,bins-1)
-            f=pos-i
-            level=lut[i]*(1.0-f)+lut[j]*f
-            levels.append(int(clamp(round(level),0,255)))
-
-        return levels,low,high
-
-    def wall_detail_levels(self,temperatures,temporal=True):
-        """Stable low-contrast tone map for walls, ceilings and room surveys.
-
-        Plain walls often span less than one degree.  A full-frame histogram
-        equalizer then expands tiny sensor noise into bright texture, so the
-        wall looks "dirty" even though the radiometric data is fine.  This mode
-        deliberately keeps a minimum temperature span and damps the display
-        range over time.  Measurements and archived RAW16 frames are untouched.
-        """
-        if not temperatures:
-            return [],float("nan"),float("nan")
-
-        sample=[t for t in temperatures[::2] if math.isfinite(t)]
-        if len(sample)<8:
-            return [0]*len(temperatures),float("nan"),float("nan")
-        sample.sort()
-
-        p02=self._percentile_sorted(sample,0.02)
-        p50=self._percentile_sorted(sample,0.50)
-        p98=self._percentile_sorted(sample,0.98)
-        scene_span=max(0.0,p98-p02)
-
-        # Minimum span is the important part: it prevents low-contrast walls
-        # from becoming a high-contrast map of sensor/FPN noise.  A slightly
-        # wider span is used once a real hot object is present.
-        min_span=3.0 if scene_span<1.2 else 4.5
-        span=max(scene_span,min_span)
-        low=p50-span*0.46
-        high=p50+span*0.54
-
-        # Keep real hot objects visible, but do not let a tiny bright pixel set
-        # the whole picture.  The 99.8th percentile is robust against one or two
-        # defective/outlier pixels while still responding to hands, pipes, etc.
-        p998=self._percentile_sorted(sample,0.998)
-        if math.isfinite(p998) and p998>high:
-            high=min(p998+0.20,p50+max(6.0,span*1.8))
-        if high<=low:
-            high=low+1.0
-
-        if temporal and self.wall_prev_low_c is not None and self.wall_prev_high_c is not None:
-            # Heavy damping gives a calm image when panning over flat surfaces.
-            a=0.82
-            low=a*self.wall_prev_low_c+(1.0-a)*low
-            high=a*self.wall_prev_high_c+(1.0-a)*high
-            if high<=low:
-                high=low+1.0
-
-        if temporal:
-            self.wall_prev_low_c=low
-            self.wall_prev_high_c=high
-
-        out=[]
-        inv=255.0/max(0.05,high-low)
-        for t in temperatures:
-            if not math.isfinite(t):
-                out.append(0)
-                continue
-            u=clamp((t-low)*inv,0.0,255.0)/255.0
-            # Gentle S-curve: quieter shadows and walls, still punchy hot areas.
-            u=u*u*(3.0-2.0*u)
-            out.append(int(round(u*255.0)))
-        return out,low,high
-
     def reset_heq_state(self):
-        self.heq_prev_lut=None
-        self.heq_prev_low=None
-        self.heq_prev_high=None
-        self.wall_prev_low_c=None
-        self.wall_prev_high_c=None
+        self.tone_mapper.reset()
 
-    def display_limits(self):
-        values=sorted(self.display_values); mode=self.scale_mode.get()
-        if mode=="Scene min–max":return values[0],values[-1]
-        if mode=="Manual":
-            try:
-                a,b=float(self.manual_min.get()),float(self.manual_max.get()); lo=min(self.display_values,key=lambda r:abs(self.raw_to_c(r)-a)); hi=min(self.display_values,key=lambda r:abs(self.raw_to_c(r)-b)); return (lo,hi) if lo<hi else (hi,lo+1)
-            except ValueError:pass
-        return values[len(values)*2//100],values[len(values)*98//100]
 
     def normalize_rotation(self,angle):
         angle=float(angle)%360.0
@@ -2517,12 +2434,17 @@ class Viewer:
 
     def render(self):
         if not self.display_values:return
-        self.temperatures=[self.raw_to_c(v) for v in self.display_values]
+        self.temperatures=self.frame_temperatures(self.display_values)
         rgb=bytearray(57600); pal=self.palette_var.get(); bg_params=None
+        # Reuse palette results within this render (settings cannot change
+        # during this synchronous callback). Preserve fractional level inputs.
+        color_cache={}
+        def color(level):
+            if level not in color_cache:
+                color_cache[level]=bytes(palette_color(pal,int(level)))
+            return color_cache[level]
 
         mode_scale=self.scale_mode.get()
-        heq_active=False
-        wall_active=False
 
         if mode_scale=="Background relative":
             # Archived frames must not borrow the live scene's temporal model.
@@ -2530,42 +2452,19 @@ class Viewer:
                 self.temperatures,use_temporal=not self.playback_mode
             )
             for i,temp in enumerate(self.temperatures):
-                level=self.adjusted_palette_level(self.background_palette_index(temp,bg_params))
-                rgb[i*3:i*3+3]=bytes(palette_color(pal,level))
+                level=self.background_palette_index(temp,bg_params)
+                rgb[i*3:i*3+3]=color(self.adjusted_palette_level(level))
             display_lo_c=bg_params["low"]
             display_hi_c=bg_params["hot"]
 
-        elif mode_scale=="Wall detail":
-            levels,wall_lo,wall_hi=self.wall_detail_levels(
-                self.temperatures,temporal=not self.playback_mode
-            )
-            for i,level in enumerate(levels):
-                rgb[i*3:i*3+3]=bytes(palette_color(pal,self.adjusted_palette_level(level)))
-            display_lo_c=wall_lo
-            display_hi_c=wall_hi
-            wall_active=True
-
-        elif mode_scale=="FLIR HEQ":
-            levels,heq_lo,heq_hi=self.flir_heq_levels(
-                self.display_values,temporal=not self.playback_mode
-            )
-            for i,level in enumerate(levels):
-                rgb[i*3:i*3+3]=bytes(palette_color(pal,self.adjusted_palette_level(level)))
-            display_lo_c=self.raw_to_c(heq_lo) if heq_lo is not None else float("nan")
-            display_hi_c=self.raw_to_c(heq_hi) if heq_hi is not None else float("nan")
-            heq_active=True
-
         else:
-            lo,hi=self.display_limits(); span=max(1,hi-lo)
-            for i,raw in enumerate(self.display_values):
-                level=int(clamp((raw-lo)*255/span,0,255))
-                rgb[i*3:i*3+3]=bytes(palette_color(pal,self.adjusted_palette_level(level)))
-            display_lo_c=self.raw_to_c(lo)
-            display_hi_c=self.raw_to_c(hi)
+            levels,display_lo_c,display_hi_c=self.display_levels(self.temperatures)
+            # Pillow's LUT conversion avoids a Python loop over every pixel.
+            indexed=Image.frombytes("P",(VIEW_W,VIEW_H),levels.tobytes())
+            indexed.putpalette([channel for level in range(256) for channel in palette_color(pal,level)])
+            rgb=indexed.convert("RGB").tobytes()
 
         thermal=Image.frombytes("RGB",(VIEW_W,VIEW_H),bytes(rgb))
-        if wall_active:
-            thermal=thermal.filter(ImageFilter.MedianFilter(size=3))
         visual=self.aligned_visual(); mode=self.view_mode.get(); alpha=clamp(self.overlay_alpha.get()/100,0,1); self.alpha_label.configure(text=f"{int(alpha*100)}%")
         if mode=="Visible" and visual is not None:shown=visual
         elif mode=="Overlay" and visual is not None:shown=Image.blend(thermal,visual,alpha)
@@ -2575,7 +2474,7 @@ class Viewer:
         else:shown=thermal
         cw=max(1,int(self.canvas.cget("width")))
         ch=max(1,int(self.canvas.cget("height")))
-        resample_display=Image.Resampling.BICUBIC if wall_active else Image.Resampling.NEAREST
+        resample_display=Image.Resampling.BILINEAR if self.interpolation_var.get()=="Smooth" else Image.Resampling.NEAREST
         base_image=shown.resize((cw,ch),resample_display)
 
         # Positive UI angle means clockwise. PIL uses positive=counter-clockwise,
@@ -2621,13 +2520,9 @@ class Viewer:
                         f"dark band {self.fmt_temp(bg_params['low'])}–{self.fmt_temp(bg_params['high'])}  •  "
                         f"hot scale → {self.fmt_temp(bg_params['hot'])}"
                     )
-                elif wall_active:
+                elif mode_scale in ("Auto","Detail"):
                     self.range_text.set(
-                        f"Wall detail • stable display {self.fmt_temp(display_lo_c)} – {self.fmt_temp(display_hi_c)}"
-                    )
-                elif heq_active:
-                    self.range_text.set(
-                        f"FLIR HEQ • scene {self.fmt_temp(display_lo_c)} – {self.fmt_temp(display_hi_c)}"
+                        f"{mode_scale} • nonlinear AGC domain {self.fmt_temp(display_lo_c)} – {self.fmt_temp(display_hi_c)}"
                     )
                 else:
                     self.range_text.set(f"Display range {self.fmt_temp(display_lo_c)} – {self.fmt_temp(display_hi_c)}")
@@ -3137,11 +3032,20 @@ class Viewer:
         values=[v for _,v in pts]
         trend=[0.0]*len(pts)
 
+        # Maintain the same median window incrementally instead of sorting
+        # an overlapping window for every historical sample on every redraw.
+        window=[]
+        window_a=window_b=0
         for i in range(len(pts)):
             a=max(0,i-half_window)
             b=min(len(pts),i+half_window+1)
-            window=values[a:b]
-            trend[i]=statistics.median(window) if window else values[i]
+            while window_b<b:
+                bisect.insort(window,values[window_b]); window_b+=1
+            while window_a<a:
+                del window[bisect.bisect_left(window,values[window_a])]; window_a+=1
+            middle=len(window)//2
+            trend[i]=(window[middle] if len(window)%2 else
+                      (window[middle-1]+window[middle])/2)
 
         residual=[values[i]-trend[i] for i in range(len(pts))]
 
@@ -3487,6 +3391,8 @@ class Viewer:
         self.csv_file.flush()
 
     def refresh(self):
+        refresh_started=time.perf_counter()
+        rendered_age_ms=None
         try:
             while True:
                 line=self.messages.get_nowait()
@@ -3533,7 +3439,9 @@ class Viewer:
                                     max_info=(self.max_point["x"],self.max_point["y"],
                                               self.max_point["history"][-1][1] if self.max_point["history"] else float("nan"))
                                 )
-                                if not self.frozen:self.render()
+                                if not self.frozen:
+                                    self.render()
+                                    rendered_age_ms=max(0.0,(time.time()-mtime/1e9)*1000)
                         else:
                             # Keep the archived frame authoritative in the UI,
                             # while still recording live scene/MAX/manual data.
@@ -3573,7 +3481,25 @@ class Viewer:
             if self.process is None and now_mono>=self.next_capture_restart:
                 try:self.start_capture(); self.status.set("Capture restarted; looking for camera…")
                 except OSError as exc:self.next_capture_restart=now_mono+2.; self.status.set(f"Could not start capture: {exc}")
-        self.root.after(40,self.refresh)
+        if rendered_age_ms is not None:
+            if not hasattr(self,"_latency_samples"):
+                self._latency_samples=deque(maxlen=90)
+                self._last_performance_report=0.0
+            self._latency_samples.append((rendered_age_ms,(time.perf_counter()-refresh_started)*1000))
+            if time.monotonic()-self._last_performance_report>=2.0:
+                self._last_performance_report=time.monotonic()
+                samples=list(self._latency_samples)
+                try:
+                    (ROOT/"outputs"/"flir-performance.json").write_text(json.dumps({
+                        "updated":time.time(),"viewer_fps":self.current_live_fps(),
+                        "samples":len(samples),
+                        "file_to_render_median_ms":statistics.median(s[0] for s in samples),
+                        "file_to_render_max_ms":max(s[0] for s in samples),
+                        "refresh_median_ms":statistics.median(s[1] for s in samples),
+                        "note":"Host file publication to Tk image submission; excludes sensor/USB/display latency"
+                    }),encoding="utf-8")
+                except OSError:pass
+        self.root.after(5,self.refresh)
 
     def close(self):
         self.save_viewer_settings()
