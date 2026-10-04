@@ -13,6 +13,9 @@ mobile application.
 - Live 160×120 radiometric thermal stream on Windows 10/11
 - Temperature under the pointer, scene minimum/centre/maximum and measurement points
 - Measurement history, hover readout, graph pause/zoom and continuous DVR archive
+- Date-organized recording gallery with thumbnails, calendar filters and date/time seeking
+- RAW playback with rotation/mirror, palettes/scaling, new measurement points and reanalysis
+- Playback speed, seek bar and previous/next recording controls; live archiving continues
 - Iron, Lava, Rainbow, White-hot and Black-hot palettes
 - Auto plateau HEQ, Detail CLAHE, Linear auto, exact Manual and background-relative scaling
 - Fine tone/span, contrast, minimum span, detail and edge-preserving denoise controls

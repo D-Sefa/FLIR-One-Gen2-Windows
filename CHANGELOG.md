@@ -1,5 +1,15 @@
 # Changelog
 
+## 0.3.0 — 2026-10-04
+
+- Added live/recorded horizontal mirror with consistent rotation and point coordinates.
+- Added date-grouped thumbnail gallery, calendars, date/time seek, playback controls and speed.
+- Reanalyze saved RAW frames with new measurement points, palettes/scales and radiometry.
+- Keep live recording, point history and CSV running while viewing recordings.
+- Isolate archive radiometry and point state from live measurements.
+- Added archive corruption, date-range, mirror and playback regression tests.
+- USB/iAP2 initialization and thermal capture are unchanged; visible stream remains unresolved.
+
 ## 0.2.0 — 2026-09-28
 
 - Replace experimental HEQ/wall display modes with independently implemented

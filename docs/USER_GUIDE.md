@@ -168,9 +168,46 @@ quickly when the USB stream slows or recovers.
 - Left-click the thermal image to add a measurement point.
 - Right-click near a point to remove it.
 - Use **Start logging** for CSV measurements.
-- Use **Open History** to inspect the continuous raw-frame archive.
+- Use **Recordings** to inspect the continuous raw-frame archive.
 - Pausing or zooming the graph does not stop collection; it changes only the
   graph view.
+
+### Recording gallery and RAW reanalysis
+
+**Recordings** opens a thumbnail gallery, newest first, grouped by local date.
+Use **From / To → Calendar → Apply** to filter days, or enter
+`YYYY-MM-DD HH:MM:SS` in **Go to date / time**. An absent recording is reported
+instead of silently jumping to an unrelated time. Sessions split at midnight
+and at gaps longer than 12 seconds. Use **Refresh** to include recent recordings.
+
+Click a thumbnail to open the recording in the main viewer. **Previous / Next**
+switch recordings; **Play / Pause**, the timeline slider and **0.25×–4×** speed
+control navigation. **Live** returns to the camera. The displayed date/time is
+the saved frame's timestamp, not the time you opened it.
+
+Rotation and the top-left **Mirror** checkbox work in both live and recorded
+views. Mirror is horizontal in the displayed orientation, after rotation.
+They change display coordinates only, never the stored RAW values.
+
+Recordings retain RAW16 data, so you can change palette, scale, tone/span and
+radiometry, and click new measurement points on old frames. The graph is
+recomputed from the saved frames for the selected time window. Hover shows
+temperature, local date/time and elapsed age. Zoom/pan or pause the graph
+without stopping playback or live acquisition. Background-relative display
+does not reconstruct the original live background-learning history.
+
+Live RAW archiving, live point history and an already running CSV log continue
+while you browse. Archive points are separate from live points. Archive-only
+radiometry edits do not alter the live measurements and are restored on **Live**.
+**Start logging** always logs the live camera, not the displayed recording.
+Analysis points are temporary for this browsing session; RAW recordings are
+unchanged. **PNG** exports the currently displayed image. **Keep** protects the
+selected recording interval from automatic cleanup.
+
+Playback can only show frames actually saved at the chosen recording rate.
+For example, a 1 FPS archive cannot reproduce an 8 FPS live stream. The
+temperature calibration retains the project's existing limitations; changing
+a palette or mirror does not improve absolute temperature accuracy.
 
 ## 8. Periodic Shutter Flash
 

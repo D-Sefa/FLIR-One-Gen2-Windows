@@ -10,6 +10,8 @@ sys.path.insert(0, str(ROOT / "work" / "pydeps"))
 sys.path.insert(0, str(ROOT / "work"))
 from PIL import Image, ImageChops, ImageDraw, ImageEnhance, ImageFilter, ImageOps, ImageTk
 from flir_display import ToneMapper, MODES, migrate_mode
+from flir_playback import PlaybackMixin
+from flir_gallery import age_label, timestamp_label
 
 CAPTURE = ROOT / "work" / "flir_iap2_frame.py"
 LIVE_RAW = ROOT / "outputs" / "flir-live.raw16"
@@ -49,7 +51,7 @@ def palette_color(name, v):
         return interpolate([(0,0,0),(70,0,110),(210,0,40),(255,100,0),(255,255,80),(255,255,255)], v)
     return interpolate([(0,0,10),(13,0,118),(72,0,150),(170,28,92),(238,92,18),(255,205,45),(255,255,255)], v)
 
-class Viewer:
+class Viewer(PlaybackMixin):
     def __init__(self):
         self.root=tk.Tk(); self.root.title("FLIR ONE Gen 2 — Thermal Analysis"); self.root.configure(bg="#101216"); self.root.minsize(1040,780)
         self.root.after(10,self.enable_dark_titlebar)
@@ -123,6 +125,8 @@ class Viewer:
         self.archive_quality_var=tk.StringVar(value=self._pending_archive_quality)
         self.archive_size_var=tk.StringVar(value="Estimating storage…")
         self.playback_mode=False
+        self.init_playback()
+        self.mirror_var=tk.BooleanVar(value=bool(self.viewer_settings.get("mirror",False)))
         self.playback_running=False
         self.playback_speed=1.0
         self.playback_time=None
@@ -239,9 +243,9 @@ class Viewer:
             "visual_x":int(self.visual_x.get()),
             "visual_y":int(self.visual_y.get()),
             "visual_zoom":int(self.visual_zoom.get()),
-            "emissivity":self.emissivity_var.get(),
-            "reflected_temp":self.reflected_var.get(),
-            "calibration_offset":self.temp_offset_var.get(),
+            "emissivity":self.radiometry_settings(live=True)[0],
+            "reflected_temp":self.radiometry_settings(live=True)[1],
+            "calibration_offset":self.radiometry_settings(live=True)[2],
             "scale_mode":self.scale_mode.get(),
             "manual_min":self.manual_min.get(),
             "manual_max":self.manual_max.get(),
@@ -255,11 +259,12 @@ class Viewer:
             "background_deadband":self.background_deadband_var.get(),
             "background_hot_span":self.background_hot_span_var.get(),
             "background_learning_seconds":self.background_learning_var.get(),
-            "smooth_3x3":bool(self.smooth_var.get()),
+            "smooth_3x3":bool(self._live_average if self.playback_mode and self._live_analysis else self.smooth_var.get()),
             "rotation_angle":float(self.rotation_angle),
+            "mirror":bool(self.mirror_var.get()),
             "viewport_scale":float(self.viewport_scale),
             "graph_window_index":int(self.graph_window_index),
-            "max_graph_visible":bool(self.max_point.get("graph",True)),
+            "max_graph_visible":bool((self._live_analysis['max_point'] if self.playback_mode and self._live_analysis else self.max_point).get("graph",True)),
             "window_geometry":geometry,
         }
 
@@ -293,9 +298,11 @@ class Viewer:
             self.tone_var,self.thermal_span_var,
             self.contrast_var,self.min_span_var,self.detail_var,self.denoise_var,self.interpolation_var,
             self.background_deadband_var,self.background_hot_span_var,
-            self.background_learning_var,self.smooth_var
+            self.background_learning_var,self.smooth_var,self.mirror_var
         ):
             var.trace_add("write",self.schedule_save_viewer_settings)
+        for var in (self.emissivity_var,self.reflected_var,self.temp_offset_var,self.smooth_var):
+            var.trace_add("write",self.request_recording_analysis)
 
     def apply_restored_view_settings(self):
         shown=int(round(self.rotation_angle)) if abs(self.rotation_angle-round(self.rotation_angle))<0.05 else round(self.rotation_angle,1)
@@ -432,6 +439,8 @@ class Viewer:
         # Image controls live outside the picture so they never cover thermal data.
         image_toolbar=tk.Frame(left,bg="#101216",bd=0)
         image_toolbar.pack(fill="x",pady=(0,6))
+        ttk.Checkbutton(image_toolbar,text="Mirror",variable=self.mirror_var,
+                        command=self.render).pack(side="left",padx=(0,8))
 
         tk.Label(
             image_toolbar,text="Rotate",bg="#101216",fg="#8f98a8",
@@ -494,6 +503,7 @@ class Viewer:
         self.size_plus.bind("<Button-1>",lambda _e:self.adjust_viewport_scale(+0.10))
         self.size_reset.bind("<Button-1>",lambda _e:self.set_viewport_scale(1.0))
 
+        self.build_playback_controls(left)
         self.canvas=tk.Canvas(left,width=CANVAS_W,height=CANVAS_H,bg="#050609",highlightthickness=1,highlightbackground="#30343c",cursor="crosshair"); self.canvas.pack()
         self.image_id=self.canvas.create_image(0,0,anchor="nw")
 
@@ -733,7 +743,7 @@ class Viewer:
         ttk.Button(graph_toolbar,text="Live",command=self.resume_graph_live).pack(side="right")
 
         history_bar=ttk.Frame(right,style="Panel.TFrame"); history_bar.pack(fill="x",padx=12,pady=(0,4))
-        ttk.Button(history_bar,text="🕘 Open History",command=self.open_history_window).pack(side="left")
+        ttk.Button(history_bar,text="▦ Recordings",command=self.open_history_window).pack(side="left")
 
         ttk.Label(history_bar,text="Recording",style="Panel.TLabel").pack(side="left",padx=(12,5))
         self.archive_quality_combo=ttk.Combobox(
@@ -1305,10 +1315,10 @@ class Viewer:
         valid=[t for t in temps if math.isfinite(t)]
         if valid:
             try:
-                e=float(self.emissivity_var.get()); tr=float(self.reflected_var.get()); off=float(self.temp_offset_var.get())
+                e,tr,off=map(float,self.radiometry_settings(live=True))
             except ValueError:
                 e,tr,off=.95,20.,0.
-            scene=(min(valid),self.sample_temp_from(temps,VIEW_W//2,VIEW_H//2),max(valid),e,tr,off)
+            scene=(min(valid),self.sample_temp_from(temps,VIEW_W//2,VIEW_H//2,live=True),max(valid),e,tr,off)
 
         pts=[]
         if max_info is None and valid:
@@ -1318,8 +1328,9 @@ class Viewer:
             mx,my,mt=max_info
             if math.isfinite(mt):pts.append(("MAX",mx,my,mt))
 
-        for p in self.points:
-            pts.append((p["name"],p["x"],p["y"],self.sample_temp_from(temps,p["x"],p["y"])))
+        live_points=self._live_analysis['points'] if self.playback_mode and self._live_analysis else self.points
+        for p in live_points:
+            pts.append((p["name"],p["x"],p["y"],self.sample_temp_from(temps,p["x"],p["y"],live=True)))
         try:
             self.dvr_queue.put_nowait(("measure",stamp,scene,pts))
         except queue.Full:
@@ -1327,7 +1338,7 @@ class Viewer:
 
     def archive_live_measurements_from_blob(self,stamp,blob):
         """Archive live measurements while an old DVR frame owns the main viewer."""
-        decoded=self.decode_raw_blob(blob)
+        decoded=self.decode_raw_blob(blob,live=True)
         if decoded is None:return
         _sensor,_values,temps=decoded
         valid=[(t,i) for i,t in enumerate(temps) if math.isfinite(t)]
@@ -1336,6 +1347,19 @@ class Viewer:
             mt,mi=max(valid)
             max_info=(mi%VIEW_W,mi//VIEW_W,mt)
         self.queue_dvr_measurements(stamp,temperatures=temps,max_info=max_info)
+        names=('points','max_point','graph_filter_state','temperatures')
+        saved={name:getattr(self,name) for name in names}
+        try:
+            for name in names[:-1]:setattr(self,name,self._live_analysis[name])
+            self.temperatures=temps
+            self.update_max_point(stamp)
+            for p in self.points:
+                value=self.filter_graph_sample(p['name'],self.sample_temp_from(temps,p['x'],p['y'],live=True))
+                if value is not None:p['history'].append((stamp,value))
+                while p['history'] and p['history'][0][0]<stamp-self.history_retention_seconds:p['history'].popleft()
+            if self.recording:self.write_csv(stamp)
+        finally:
+            for name,value in saved.items():setattr(self,name,value)
 
     def dvr_writer_loop(self):
         con=sqlite3.connect(self.dvr_db,timeout=30)
@@ -1438,7 +1462,7 @@ class Viewer:
             return None
         samples=[]
         for i in range(0,19200,32):
-            t=self.raw_to_c(sensor[i])
+            t=self.raw_to_c(sensor[i],live=True)
             if math.isfinite(t):
                 samples.append(t)
         return samples if len(samples)>=100 else None
@@ -1504,7 +1528,7 @@ class Viewer:
         self.frame_guard_candidate_count=0
         return True,""
 
-    def decode_raw_blob(self,blob):
+    def decode_raw_blob(self,blob,live=False):
         """Decode one 160×120 sensor RAW16 frame to the rotated 120×160 view."""
         if len(blob)!=38400:
             return None
@@ -1517,7 +1541,7 @@ class Viewer:
             row=sy*SRC_W
             for sx in range(SRC_W):
                 out[(SRC_W-1-sx)*VIEW_W+sy]=sensor[row+sx]
-        temps=self.frame_temperatures(out)
+        temps=self.frame_temperatures(out,live=live)
         return sensor,out,temps
 
     def load_raw_blob(self,blob,update_background=True):
@@ -1560,6 +1584,9 @@ class Viewer:
             con.close()
 
     def open_history_window(self):
+        self.open_gallery()
+
+    def _legacy_history_window(self):
         if self.history_window is not None and self.history_window.winfo_exists():
             self.history_window.deiconify()
             self.history_window.lift()
@@ -1976,10 +2003,14 @@ class Viewer:
                 f"Max {max(valid):.1f} °C • main viewer active"
             )
 
-    def frame_temperatures(self,values):
+    def radiometry_settings(self,live=False):
+        if live and self.playback_mode and self._live_analysis:return self._live_radiometry
+        return (self.emissivity_var.get(),self.reflected_var.get(),self.temp_offset_var.get())
+
+    def frame_temperatures(self,values,live=False):
         # Cache exact conversions across frames; invalidate on any calibration
         # edit. RAW16 bounds this cache to at most 65,536 sensor values.
-        key=(self.emissivity_var.get(),self.reflected_var.get(),self.temp_offset_var.get())
+        key=self.radiometry_settings(live)
         if (getattr(self,"_temperature_frame_values",None) is values
                 and getattr(self,"_temperature_cache_key",None)==key):
             return self._temperature_frame_result
@@ -1988,17 +2019,16 @@ class Viewer:
             self._temperature_cache={}
         converted=self._temperature_cache
         for v in set(values):
-            if v not in converted:converted[v]=self.raw_to_c(v)
+            if v not in converted:converted[v]=self.raw_to_c(v,live=live)
         result=[converted[v] for v in values]
         self._temperature_frame_values=values
         self._temperature_frame_result=result
         return result
 
-    def raw_to_c(self,raw14):
+    def raw_to_c(self,raw14,live=False):
         try:
-            e=clamp(float(self.emissivity_var.get()),.01,1.0)
-            tr=float(self.reflected_var.get())
-            offset=float(self.temp_offset_var.get())
+            e,tr,offset=map(float,self.radiometry_settings(live))
+            e=clamp(e,.01,1.0)
         except ValueError:
             e,tr,offset=.95,20.,0.0
         try:
@@ -2015,9 +2045,10 @@ class Viewer:
         factor=9/5 if self.unit_var.get()=="°F" else 1.0
         return f"{c_delta*factor:+.1f} {self.unit_var.get()}"
 
-    def sample_temp_from(self,temperatures,x,y):
+    def sample_temp_from(self,temperatures,x,y,live=False):
         if not temperatures:return float("nan")
-        r=1 if self.smooth_var.get() else 0; vals=[]
+        average=self._live_average if live and self.playback_mode and self._live_analysis else self.smooth_var.get()
+        r=1 if average else 0; vals=[]
         for yy in range(max(0,y-r),min(VIEW_H,y+r+1)):
             for xx in range(max(0,x-r),min(VIEW_W,x+r+1)):
                 v=temperatures[yy*VIEW_W+xx]
@@ -2342,6 +2373,7 @@ class Viewer:
 
     def reset_view(self):
         self.rotation_angle=0.0
+        self.mirror_var.set(False)
         self.rotation_angle_label.configure(text="0°")
         self.set_viewport_scale(1.0)
 
@@ -2416,13 +2448,16 @@ class Viewer:
         dy=y-ch/2.0
         rx=c*dx-s*dy + tr["rw"]/2.0
         ry=s*dx+c*dy + tr["rh"]/2.0
-        return tr["ox"]+rx*tr["scale"], tr["oy"]+ry*tr["scale"]
+        cx,cy=tr["ox"]+rx*tr["scale"], tr["oy"]+ry*tr["scale"]
+        if self.mirror_var.get():cx=cw-1-cx
+        return cx,cy
 
     def canvas_to_image(self,x,y):
         """Inverse of image_to_canvas(); returns original unrotated canvas pixels."""
         tr=self.rotation_transform
         if not tr:
             return x,y
+        if self.mirror_var.get():x=int(self.canvas.cget("width"))-1-x
         rx=(x-tr["ox"])/tr["scale"]-tr["rw"]/2.0
         ry=(y-tr["oy"])/tr["scale"]-tr["rh"]/2.0
         a=math.radians(tr["angle"])
@@ -2465,7 +2500,7 @@ class Viewer:
             rgb=indexed.convert("RGB").tobytes()
 
         thermal=Image.frombytes("RGB",(VIEW_W,VIEW_H),bytes(rgb))
-        visual=self.aligned_visual(); mode=self.view_mode.get(); alpha=clamp(self.overlay_alpha.get()/100,0,1); self.alpha_label.configure(text=f"{int(alpha*100)}%")
+        visual=None if self.playback_mode else self.aligned_visual(); mode=self.view_mode.get(); alpha=clamp(self.overlay_alpha.get()/100,0,1); self.alpha_label.configure(text=f"{int(alpha*100)}%")
         if mode=="Visible" and visual is not None:shown=visual
         elif mode=="Overlay" and visual is not None:shown=Image.blend(thermal,visual,alpha)
         elif mode=="MSX edges" and visual is not None:
@@ -2497,6 +2532,7 @@ class Viewer:
         ox=(cw-fw)//2; oy=(ch-fh)//2
         composed=Image.new("RGB",(cw,ch),(5,6,9))
         composed.paste(rotated,(ox,oy))
+        if self.mirror_var.get():composed=ImageOps.mirror(composed)
         self.rendered_image=composed
         self.rotation_transform={
             "angle":angle,
@@ -2673,7 +2709,7 @@ class Viewer:
         rows=[]
 
         for kind,p in rows_data:
-            temp=p["history"][-1][1] if p["history"] else float("nan")
+            temp=(self.sample_temp(p["x"],p["y"]) if kind!='auto' else max(self.temperatures,default=float('nan'))) if self.playback_mode else (p["history"][-1][1] if p["history"] else float("nan"))
             vals=[v for _,v in p["history"] if math.isfinite(v)]
             delta=vals[-1]-vals[0] if len(vals)>1 else 0
             mark="☑" if p.get("graph",True) else "☐"
@@ -2727,7 +2763,8 @@ class Viewer:
         # duplicate the automatic MAX and every existing point at the same frame.
         p=self.points[-1]
         v=self.filter_graph_sample(p["name"],self.sample_temp(p["x"],p["y"]))
-        if v is not None:p["history"].append((time.time(),v))
+        if v is not None and not self.playback_mode:p["history"].append((time.time(),v))
+        self.request_recording_analysis()
         self.refresh_point_list()
         self.point_list.selection_clear(0,"end")
         self.point_list.selection_set(1+len(self.points)-1)
@@ -2742,11 +2779,13 @@ class Viewer:
         if (self.points[i]["x"]-x)**2+(self.points[i]["y"]-y)**2<=100:
             removed_name=self.points[i]["name"]
             del self.points[i]
+            self.request_recording_analysis()
             if self.graph_selected_series==removed_name:
                 self.graph_selected_series="MAX"
             self.refresh_point_list(); self.render(); self.request_graph_redraw(force=True)
     def clear_points(self):
         self.points.clear()
+        self.request_recording_analysis()
         self.graph_selected_series="MAX"
         self.refresh_point_list()
         self.graph_dirty=True
@@ -2790,6 +2829,9 @@ class Viewer:
         self.graph_view_t0_override=None
         self.graph_y_pan_c=0.0
         self.graph_pause_button.configure(text="⏸ Pause graph")
+        if self.playback_mode:
+            self.graph_view_t0_override=max(self.recording_session['start'],self.playback_time-self.graph_window_seconds()/2)
+            self.request_recording_analysis()
         self.graph_dirty=True
         self.draw_graph(force=True)
 
@@ -3120,6 +3162,7 @@ class Viewer:
         return corrected
 
     def draw_graph(self,force=False):
+        self.request_recording_analysis()
         if self.graph_paused and not force:return
         now_mono=time.monotonic()
         if not force and (not self.graph_dirty or now_mono-self.graph_last_draw<0.20):return
@@ -3153,13 +3196,13 @@ class Viewer:
             self.graph_render_state=None
         else:
             span=float(self.graph_window_seconds())
-            latest=max(s["data"][-1][0] for s in series)
+            latest=self.playback_time if self.playback_mode else max(s["data"][-1][0] for s in series)
 
             if self.graph_view_t0_override is not None:
                 t0=float(self.graph_view_t0_override)
                 # Do not let a live zoom/pan window get stranded forever while
                 # new samples move beyond it.
-                if (not self.graph_paused and
+                if (not self.playback_mode and not self.graph_paused and
                         (latest < t0-0.001 or latest > t0+span+0.001)):
                     self.graph_view_t0_override=None
                     self.graph_y_pan_c=0.0
@@ -3171,7 +3214,7 @@ class Viewer:
                 view_t1=view_t0+span
                 vis=[]; yvals=[]
                 for s in series:
-                    cleaned_full=self.remove_periodic_graph_pattern(s["data"],75.0)
+                    cleaned_full=s['data'] if self.playback_mode else self.remove_periodic_graph_pattern(s["data"],75.0)
                     data=[(t,v) for t,v in cleaned_full if view_t0<=t<=view_t1]
                     if data:
                         ns=dict(s); ns["data"]=data
@@ -3181,7 +3224,7 @@ class Viewer:
 
             t1,visible,vals=collect_visible(t0)
 
-            if not vals and not self.graph_paused:
+            if not vals and not self.graph_paused and not self.playback_mode:
                 # Hard recovery for any stale timeline state: if live samples
                 # exist, the live graph must display them.
                 self.graph_view_t0_override=None
@@ -3254,7 +3297,7 @@ class Viewer:
                 end_label=dt.datetime.fromtimestamp(t1).strftime("%H:%M:%S")
                 d.text((w-mr-52,h-20),end_label,fill=(146,154,170))
                 elapsed=max(0.0,min(span,latest-t0))
-                page_label=f"{self.format_span(elapsed)} / {self.format_span(span)}"
+                page_label=(dt.datetime.fromtimestamp(t0).strftime('%Y-%m-%d') if self.playback_mode else f"{self.format_span(elapsed)} / {self.format_span(span)}")
                 d.text((max(ml,w//2-35),h-20),page_label,fill=(120,128,140))
 
                 self.graph_render_state={
@@ -3312,17 +3355,18 @@ class Viewer:
         y=state["mt"]+(state["ymax"]-temp)/max(1e-9,state["ymax"]-state["ymin"])*(state["h"]-state["mt"]-state["mb"])
 
         self.graph.delete("graph_hover")
+        self.graph.create_line(x,state['mt'],x,state['h']-state['mb'],fill='#d9dde5',dash=(3,3),tags='graph_hover')
         self.graph.create_oval(
             x-2,y-2,x+2,y+2,
             fill=series["color"],outline="",tags="graph_hover"
         )
-        tx=min(max(state["ml"]+4,x+7),state["w"]-58)
+        tx=min(max(state["ml"]+4,x+7),state["w"]-160)
         ty=max(state["mt"]+4,y-14)
         self.graph.create_text(
             tx,ty,
-            text=self.fmt_temp(temp),
+            text=f'{self.fmt_temp(temp)}\n{timestamp_label(stamp)}\n{age_label(stamp)}',
             fill=series["color"],
-            anchor="w",
+            anchor="nw",
             font=("Segoe UI",8),
             tags="graph_hover"
         )
@@ -3334,18 +3378,7 @@ class Viewer:
 
     def toggle_freeze(self):
         if self.playback_mode:
-            self.playback_mode=False; self.frozen=False; self.history_playing=False
-            if self.history_play_after:
-                try:self.root.after_cancel(self.history_play_after)
-                except Exception:pass
-                self.history_play_after=None
-            if hasattr(self,"history_play_button"):self.history_play_button.configure(text="▶ Playback")
-            try:
-                blob=LIVE_RAW.read_bytes()
-                if len(blob)==38400:self.load_raw_blob(blob,update_background=True)
-            except OSError:pass
-            self.freeze_button.configure(text="⏸ Freeze image")
-            self.status.set("Live stream"); self.render(); return
+            self.return_to_live(); return
         self.frozen=not self.frozen
         self.freeze_button.configure(text="▶ Resume image" if self.frozen else "⏸ Freeze image")
         self.status.set("Thermal image frozen" if self.frozen else "Live stream")
@@ -3368,7 +3401,8 @@ class Viewer:
         self.csv_writer=csv.writer(self.csv_file,delimiter=";")
         # Freeze the CSV schema for the whole recording. Points created/deleted
         # mid-recording cannot shift the columns under existing data.
-        self.csv_series_names=["MAX"]+[p["name"] for p in self.points]
+        live_points=self._live_analysis['points'] if self.playback_mode and self._live_analysis else self.points
+        self.csv_series_names=["MAX"]+[p["name"] for p in live_points]
         self.csv_writer.writerow(["Timestamp","Elapsed (s)"]+[f'{name} (°C)' for name in self.csv_series_names])
         self.record_start=time.time(); self.recording=True
         self.record_text.set("■ Stop logging")
@@ -3502,6 +3536,7 @@ class Viewer:
         self.root.after(5,self.refresh)
 
     def close(self):
+        self.close_playback()
         self.save_viewer_settings()
         self.save_storage_settings()
         if self.csv_file:self.csv_file.close()
