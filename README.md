@@ -8,6 +8,21 @@ mobile application.
 
 ![Thermal viewer sample](docs/sample-thermal-frame.png)
 
+## Android APK — preview
+
+The independent Android port has been tested by the project owner with his
+Gen 2 Lightning/iOS camera. Download the signed APK from the
+[Android preview release](https://github.com/D-Sefa/FLIR-One-Gen2-Windows/releases/tag/android-v0.1.0-preview).
+Android 8.0+ and USB OTG are required; no root, Python, Zadig or FLIR SDK is needed.
+Install the APK, connect the powered camera through a suitable USB data/OTG
+connection, open the app and allow Android USB access. An ordinary Lightning
+charging cable is not a substitute for the required data connection.
+
+Live thermal view, palettes/scaling, rotate/mirror, touch measurements, graphs,
+PNG export and RAW recording/playback are included. Optical/MSX is not supported.
+Other phone models are not yet verified. See the [Android guide and source](android/README.md).
+The Windows release and setup instructions below remain unchanged.
+
 ## Features
 
 - Live 160×120 radiometric thermal stream on Windows 10/11

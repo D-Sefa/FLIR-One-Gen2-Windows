@@ -1,5 +1,14 @@
 # Changelog
 
+## Android 0.1.0-preview — 2026-10-06
+
+- Publish an independent Android 8+ USB-host/iAP2 thermal viewer and signed APK.
+- Include palettes/scaling, rotate/mirror, touch temperatures, graphs, PNG export
+  and RAW recording/playback with timestamps and adjustable display settings.
+- Installation and live streaming confirmed by the owner on his Android phone.
+- Other phones remain unverified; optical/MSX and full desktop feature parity
+  are not included. Windows capture and viewer are unchanged.
+
 ## 0.3.0 — 2026-10-04
 
 - Added live/recorded horizontal mirror with consistent rotation and point coordinates.
