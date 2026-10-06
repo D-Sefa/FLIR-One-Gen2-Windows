@@ -8,12 +8,34 @@ Install the signed APK, turn on the camera, connect its data cable through OTG,
 open the app and accept Android's USB permission dialog. Keep the camera's
 own battery charged. This app cannot repair an intermittent USB cable.
 
-The iOS/Lightning camera must already have a suitable USB data connection;
-an ordinary passive USB-C/Lightning charging cable is not a substitute.
+## Hardware prerequisite
+
+**The tested Gen 2 Lightning/iOS camera is physically modified.** To reproduce
+the connection used by this project, the camera must be opened, its Lightning
+connector removed and a USB data cable soldered in its place to the corresponding
+PCB USB data/ground connections. The USB cable is then connected to the Android
+phone through OTG. Installing the APK alone does not make an untouched Lightning
+camera compatible with an ordinary USB-C/Lightning charging cable or adapter.
+
+This requires fine soldering and can permanently damage the camera. Disconnect
+the battery and all external power before opening or soldering. Do not identify
+signals by wire colour alone. Verify the board connections and check for shorts
+before powering up; secure and insulate the cable with strain relief.
+
+**This is not a verified pad-by-pad wiring guide.** No universal PCB pinout or
+safe replacement charging connection is documented here. In particular, do not
+blindly connect the USB cable's +5 V/VBUS wire to a Lightning pad or battery
+terminal. Data wiring and camera power/charging are separate concerns; retain
+a verified power arrangement and a charged camera battery. If you cannot verify
+the connections, have a qualified electronics technician perform the modification.
+No firmware conversion or `connector_type` change is required by this APK.
+
+Unmodified-camera adapter alternatives have not been verified by this project.
 
 ## Install the preview APK
 
-1. Download `FLIR-Gen2-Android-preview.apk` from the Android GitHub release.
+1. Complete and verify the hardware connection described above, then download
+   `FLIR-Gen2-Android-preview.apk` from the Android GitHub release.
 2. Transfer it to your phone and open it. If prompted, allow installation from
    the browser or file manager you used, then install. You can revoke this
    installation permission afterward.

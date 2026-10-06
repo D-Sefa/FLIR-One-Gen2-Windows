@@ -6,6 +6,19 @@ by the project owner on his Android phone. Other phones are not yet verified.
 
 ## Download and install
 
+**Hardware prerequisite:** the working camera is modified. Reproducing the
+tested connection requires opening the Gen 2 Lightning/iOS camera, removing
+its Lightning connector and soldering a USB data cable in its place to the
+corresponding PCB USB data/ground connections. The APK is not a plug-and-play
+solution for an untouched Lightning camera or an ordinary charging adapter.
+
+This modification can damage the camera. Disconnect the battery and all power
+before soldering. Verify signals and check for shorts; do not blindly connect
+USB +5 V/VBUS to a Lightning pad or battery terminal. Camera power/charging
+must use a verified arrangement. A universal pad-by-pad pinout is not provided.
+Read the [hardware prerequisite and safety notes](https://github.com/D-Sefa/FLIR-One-Gen2-Windows/blob/main/android/README.md#hardware-prerequisite)
+before attempting the modification.
+
 Download **FLIR-Gen2-Android-preview.apk**, transfer it to your Android 8.0+
 phone and install it. Allow installation from your browser/file manager if
 Android asks. Turn on the camera and connect its suitable USB data cable

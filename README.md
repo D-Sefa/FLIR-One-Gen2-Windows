@@ -14,9 +14,14 @@ The independent Android port has been tested by the project owner with his
 Gen 2 Lightning/iOS camera. Download the signed APK from the
 [Android preview release](https://github.com/D-Sefa/FLIR-One-Gen2-Windows/releases/tag/android-v0.1.0-preview).
 Android 8.0+ and USB OTG are required; no root, Python, Zadig or FLIR SDK is needed.
-Install the APK, connect the powered camera through a suitable USB data/OTG
-connection, open the app and allow Android USB access. An ordinary Lightning
-charging cable is not a substitute for the required data connection.
+**Hardware modification is required for the connection tested here:** open the
+camera, remove the Lightning connector and solder a USB data cable in its place
+to the corresponding PCB USB data/ground connections. This is a modified camera,
+not a plug-and-play solution for an untouched Lightning unit. The APK alone or
+an ordinary Lightning charging adapter does not provide this connection.
+See the [hardware prerequisite and safety notes](android/README.md#hardware-prerequisite).
+After the hardware connection is prepared, install the APK, connect the powered
+camera through USB OTG, open the app and allow Android USB access.
 
 Live thermal view, palettes/scaling, rotate/mirror, touch measurements, graphs,
 PNG export and RAW recording/playback are included. Optical/MSX is not supported.
