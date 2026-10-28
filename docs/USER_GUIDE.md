@@ -1,5 +1,15 @@
 # User Guide
 
+Windows 0.4.0 uses the same deep navy / mint visual language as the Android app.
+Only desktop visuals changed: capture, calibration, display algorithms, RAW DVR
+and gallery behavior are retained. For Android installation, manual 1 FPS image
+recording and auto-hiding controls, use the [Android guide](../android/USER_GUIDE.md).
+
+For the **portable Windows EXE**, Python installation and `setup.cmd` are not
+required. First install WinUSB drivers with Zadig on the three FLIR interfaces,
+then extract the full portable ZIP and run `FLIR-One-Gen2.exe`. The official
+Zadig executable is bundled in `drivers/`. See [portable instructions](PORTABLE_README.md).
+
 ## 1. Supported Hardware
 
 This release targets the **FLIR ONE Gen 2 Lightning/iOS** model that enumerates

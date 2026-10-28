@@ -1,7 +1,14 @@
 .venv/
+portable-build/
+portable-dist/
 __pycache__/
 *.py[cod]
 *.log
+android/build/
+*.apk
+*.jks
+*.keystore
+portable-vendor/
 
 outputs/flir-live.*
 outputs/flir-capture.log

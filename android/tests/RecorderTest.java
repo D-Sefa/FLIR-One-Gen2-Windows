@@ -16,6 +16,14 @@ public class RecorderTest {
         int count=0;try(RawArchive.Reader reader=new RawArchive.Reader(new FileInputStream(fresh))){RawArchive.Sample sample;
             while((sample=reader.next())!=null){if(sample.raw[9]!=12345)throw new AssertionError("RAW changed");count++;}}
         if(count!=accepted)throw new AssertionError("Finalization lost queued samples: "+count+"/"+accepted);
+        File ringDir=Files.createTempDirectory("flir-ring-test").toFile();
+        StorageBudget budget=new StorageBudget(ringDir,100000);
+        RawRecorder ring=new RawRecorder(new File(ringDir,"FLIR-ring.f1raw"),s->{throw new AssertionError(s);},budget,80000);
+        for(int i=0;i<6;i++)ring.offer(raw,i);ring.close();
+        if(!ring.awaitComplete(3000))throw new AssertionError("Ring recording did not stop");
+        long bytes=0;int records=0;for(File f:ringDir.listFiles()){
+            bytes+=f.length();try(RawArchive.Reader r=new RawArchive.Reader(new FileInputStream(f))){while(r.next()!=null)records++;}}
+        if(bytes>100000||records!=2)throw new AssertionError("Recording failed to rotate/prune while preserving newest complete frames: "+bytes+"/"+records);
         System.out.println("PASS recorder exclusive file / finalization / "+count+" queued samples");
     }
 }

@@ -1,112 +1,86 @@
-# FLIR ONE Gen 2 — Android
+# FLIR ONE Gen 2 — Android 0.3.0 preview
 
-Independent Android USB-host port of the working Windows iAP2 capture.
-No FLIR APK/SDK code is bundled. No root, Python, Zadig, network connection,
-or firmware conversion is required on the phone. Android 8.0+ and USB OTG are required.
+Independent Java USB-host/iAP2 app for the FLIR ONE Gen 2 Lightning/iOS camera.
+Android 8.0+ and USB OTG are required. No root, Python, Zadig, FLIR SDK, network
+connection or firmware conversion is needed on the phone.
 
-Install the signed APK, turn on the camera, connect its data cable through OTG,
-open the app and accept Android's USB permission dialog. Keep the camera's
-own battery charged. This app cannot repair an intermittent USB cable.
+## Install
+
+Download **FLIR-Gen2-Android-0.3.0.apk** from the
+[Android release](https://github.com/D-Sefa/FLIR-One-Gen2-Windows/releases/tag/android-v0.3.0-preview).
+Install over the existing preview to keep private recordings; do not uninstall.
+Turn on the camera, connect the verified USB data cable through OTG and accept
+Android USB access. Select Always / Use by default if offered. Android remains
+in control of USB permission and may ask again on reconnect or camera reset.
 
 ## Hardware prerequisite
 
-**The tested Gen 2 Lightning/iOS camera is physically modified.** To reproduce
-the connection used by this project, the camera must be opened, its Lightning
-connector removed and a USB data cable soldered in its place to the corresponding
-PCB USB data/ground connections. The USB cable is then connected to the Android
-phone through OTG. Installing the APK alone does not make an untouched Lightning
-camera compatible with an ordinary USB-C/Lightning charging cable or adapter.
+**The tested Gen 2 Lightning/iOS camera is physically modified.** Reproducing
+this connection requires opening the camera, removing its Lightning connector
+and soldering a USB data cable in its place to the corresponding PCB USB
+data/ground connections. The APK or an ordinary Lightning charging adapter
+does not make an untouched Lightning unit compatible.
 
-This requires fine soldering and can permanently damage the camera. Disconnect
-the battery and all external power before opening or soldering. Do not identify
-signals by wire colour alone. Verify the board connections and check for shorts
-before powering up; secure and insulate the cable with strain relief.
+Fine soldering can permanently damage the camera. Disconnect the battery and
+all external power before opening or soldering. Do not identify signals by
+wire colour alone. Verify connections, check for shorts, insulate the cable
+and add strain relief.
 
 **This is not a verified pad-by-pad wiring guide.** No universal PCB pinout or
-safe replacement charging connection is documented here. In particular, do not
-blindly connect the USB cable's +5 V/VBUS wire to a Lightning pad or battery
-terminal. Data wiring and camera power/charging are separate concerns; retain
-a verified power arrangement and a charged camera battery. If you cannot verify
-the connections, have a qualified electronics technician perform the modification.
-No firmware conversion or `connector_type` change is required by this APK.
+safe replacement charging connection is documented. Do not blindly connect
+USB +5 V/VBUS to a Lightning pad or battery terminal. Data and camera charging
+are separate concerns: retain a verified power arrangement and charged camera
+battery. Have a qualified technician make changes you cannot verify.
+Unmodified-camera adapters, Gen 3/Pro and other variants are not verified.
+No connector_type change or firmware conversion is required.
 
-Unmodified-camera adapter alternatives have not been verified by this project.
+## Current features
 
-## Install the preview APK
+- Full-window aspect-preserving thermal image, dark navy/mint settings panel.
+- Controls hide after four idle seconds; first tap reveals without adding a pin.
+- Adaptive transparent point readings and MAX graph with thin axes/min/max labels.
+- Rotate, Mirror, image zoom, MAX/MIN tracking and measurement reset.
+- Seven palettes, five scale modes, fine tone/span/contrast/detail/denoise tuning,
+  mode-specific controls and separate display/temperature resets.
+- Celsius/Fahrenheit, emissivity/reflected temperature/offset and optional 3x3 averaging.
+- Graph inspection with date/time/age crosshair, pause, pan and zoom; collection
+  continues while the graph viewport is paused.
+- Live display uses replaceable latest-frame worker/UI mailboxes. JPEG encoding
+  and disk writing are independent. No claimed benchmark FPS for this phone build.
+- **Manual Record only:** one rendered JPEG per second in .f1clip segments.
+  No automatic recording and no new RAW recording. Live is not limited to 1 FPS.
+- Recording dates/calendar, timeline seeking, stepping/speed and PNG export.
+  Saved JPEG colours cannot be reprocessed into temperature maps.
+- Existing .f1raw import/playback/analysis and temperature CSV export remain available.
+- Default 1,000 MB quota, adjustable 100–10,000 MB; oldest completed app recordings
+  are pruned on writes while active recording/playback/export files are protected.
 
-1. Complete and verify the hardware connection described above, then download
-   `FLIR-Gen2-Android-preview.apk` from the Android GitHub release.
-2. Transfer it to your phone and open it. If prompted, allow installation from
-   the browser or file manager you used, then install. You can revoke this
-   installation permission afterward.
-3. Turn on the camera with its battery charged and connect its suitable USB
-   data cable through a USB OTG adapter. Open **FLIR Gen2 Thermal**.
-4. Accept the Android USB access prompt. The thermal stream starts automatically.
+See the [complete user guide](USER_GUIDE.md). Desktop DVR archives and phone
+archives have different formats. App-private recordings are removed on uninstall:
+export important files first. Recording stops when the app leaves the foreground.
 
-Windows WinUSB/Zadig drivers do not apply to Android. This is not a general
-USB webcam app: the verified target is the Gen 2 Lightning/iOS camera using
-VID `09CB`, PID `1996`. Gen 3/Pro and arbitrary Lightning adapters are not verified.
-If USB permission is denied, disconnect/reconnect and grant permission.
-If no camera is detected, check USB host/OTG support, data wiring and camera power.
-No firmware conversion or persistent camera configuration change is required.
+## Limits and verification
 
-## Design / constraints
+Thermal only: optical/visible/MSX remains unavailable. This is not arbitrary full
+Windows feature parity or a background camera service. Temperature values use the
+existing approximate calibration model, not laboratory or medical calibration.
+Installation/live streaming were confirmed by the owner on his modified Gen 2
+and Android phone; other phones and quantitative FPS/reconnection performance
+for this build remain unverified.
 
-- Separate project: never modify the working Windows capture or viewer.
-- Java USB Host API, native Canvas UI; no closed-source SDK or JNI dependencies.
-- Port the existing DETECT/SYN/identification/certificate/challenge/config session
-  sequence, MI01/MI02 alternate settings and 30-second autoFFC keepalive.
-- AuthenticationSucceeded is the host's acknowledgement as in the Windows code;
-  this app does not validate Apple's certificate cryptographically or emulate iOS.
-- EP85 records end at `28 + FrameSize`; reject section sum greater than FrameSize.
-- Raw 160x120 samples retain the known Gen2 VoSPI layout; JPEG offsets use ThermalSize.
-- Latest frame only; no growing rendering queue. Camera access runs off the UI thread.
-- Thermal view, palettes, auto/linear/manual scales, tone/span, rotate/mirror,
-  touch temperatures and measurement graph; raw recording and replay with display controls.
-- Optical availability remains unverified; do not claim MSX when no JPEG arrives.
-- Celsius measurements use the desktop's approximate calibration constants,
-  not a claim of laboratory calibration or medical accuracy.
-- USB permission is a mandatory Android system prompt, not a removable setup step.
-- Compile, sign and verify the APK; desktop protocol fixtures and JVM tests are
-  evidence of the port, not evidence of physical phone/USB compatibility.
-
-## Implementation plan
-
-1. Core: packet/checksum/CSM codec, reassembly, iAP2 state machine, frame parser,
-   radiometry and tone mapping. Test missing behavior RED, then GREEN against
-   known Windows packets and chunked/malformed EP85 fixtures.
-2. Transport: descriptor-based endpoint lookup, permission flow, worker lifecycle,
-   sequence handling, bounded recovery, keepalive and last-frame-age reporting.
-3. UI: latest-frame rendering, settings, point graph, screenshots, RAW archive/replay;
-   no modifications of captured samples by display settings.
-4. Build: isolated pinned JDK/Android tools, reproducible PowerShell build, local
-   signing key kept outside source distribution. Check manifest, APK signature,
-   JVM suite and existing Windows regression suite. Report phone testing honestly.
-
-Review focus: fragmented link packets; malformed/oversized frame headers; unplug
-during handshake; denied permission; background/reopen/replay transitions.
+All 14 offline JVM test programs pass, Android sources compile, and APK v2/v3
+signatures verify. Those checks do not substitute for physical phone tests.
+The original signing identity and package ID support in-place upgrades.
 
 ## Build
 
-`build.ps1` uses a local pinned JDK 17 and Google Android API 35 / build-tools 35.0.0.
-The toolchain lives outside the source tree in `../../android-toolchain` by default.
-Pass `-Toolchain <path>` to override it. The script runs the JVM tests, javac,
-D8, aapt2, zipalign and apksigner. It creates a private local preview signing key
-outside the source tree. Keep that key for future updates of your own build.
-The prebuilt APK contains no native libraries and is architecture-independent.
+Run build.ps1 with -Toolchain pointing to your local toolchain directory containing
+JDK 17, Android API 35 and build-tools 35.0.0 in the layout used by that script.
+The default ../../android-toolchain is a developer workspace path, not a bundled
+dependency. The script runs tests, javac, D8, aapt2, zipalign and apksigner.
+It creates a local signing key outside source. Keep your own key for future
+updates; signing credentials and toolchain binaries are never distributed here.
+Prebuilt APK has no native libraries and is architecture-independent.
 
-## Verification status
-
-The preview APK compiles and its v2/v3 signature verifies. JVM tests cover link
-framing, checksums, the Windows handshake, authoritative frame lengths, RAW
-extraction, radiometry, callback retirement, USB lifetime serialization and RAW
-archive finalization. The existing Windows suite passes (33 tests).
-
-**Physically tested by the project owner:** installation and live thermal streaming
-worked with his Gen 2 Lightning/iOS camera connected to an Android phone over OTG.
-Compatibility with other phone models and Android versions is not yet established.
-This is a first Android port, not full desktop feature parity: no optical/MSX,
-desktop-style calendar seeking, background camera service or automatic disk quota.
-RAW files stay in app-private storage until exported; uninstalling removes them.
-Recording is explicit and stops when the app leaves the foreground. A graph pause
-does not stop measurement or RAW recording; an image freeze holds only the display.
+USB initialization, authentication/session keepalive and EP85 parsing are the
+existing working transport, not a new firmware or MFi chip modification.

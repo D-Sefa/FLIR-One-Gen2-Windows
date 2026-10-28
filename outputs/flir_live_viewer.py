@@ -5,7 +5,7 @@ import bisect, csv, datetime as dt, json, math, os, pathlib, queue, re, sqlite3,
 from collections import deque
 from tkinter import filedialog, messagebox, ttk
 
-ROOT = pathlib.Path(__file__).resolve().parents[1]
+ROOT = pathlib.Path(os.environ.get("FLIR_PORTABLE_DATA_ROOT", pathlib.Path(__file__).resolve().parents[1]))
 sys.path.insert(0, str(ROOT / "work" / "pydeps"))
 sys.path.insert(0, str(ROOT / "work"))
 from PIL import Image, ImageChops, ImageDraw, ImageEnhance, ImageFilter, ImageOps, ImageTk
@@ -53,7 +53,7 @@ def palette_color(name, v):
 
 class Viewer(PlaybackMixin):
     def __init__(self):
-        self.root=tk.Tk(); self.root.title("FLIR ONE Gen 2 — Thermal Analysis"); self.root.configure(bg="#101216"); self.root.minsize(1040,780)
+        self.root=tk.Tk(); self.root.title("FLIR ONE Gen 2 — Thermal Analysis"); self.root.configure(bg="#050609"); self.root.minsize(1040,780)
         self.root.after(10,self.enable_dark_titlebar)
         self.viewer_settings=self.load_viewer_settings_file()
         self._settings_save_after=None
@@ -76,7 +76,7 @@ class Viewer(PlaybackMixin):
         self.max_point={
             "name":"MAX",
             "x":0,"y":0,
-            "color":"#d9dde5",
+            "color":"#d8e8ef",
             "history":deque(maxlen=self.history_max_samples),
             "graph":bool(self.viewer_settings.get("max_graph_visible",True)),
             "auto_hot":True,
@@ -351,18 +351,18 @@ class Viewer(PlaybackMixin):
         try: style.theme_use("clam")
         except tk.TclError: pass
 
-        BG="#101216"
-        PANEL="#191c22"
-        FIELD="#111319"
-        FIELD2="#151820"
-        BORDER="#30343c"
-        TEXT="#e7e9ee"
-        MUTED="#9aa3b2"
-        ACCENT="#31577d"
-        BUTTON="#242932"
-        BUTTON_HOVER="#303640"
+        BG="#050609"
+        PANEL="#111923"
+        FIELD="#0d141e"
+        FIELD2="#15202c"
+        BORDER="#263545"
+        TEXT="#eff5ff"
+        MUTED="#98adb9"
+        ACCENT="#7fded2"
+        BUTTON="#1c2a39"
+        BUTTON_HOVER="#293d4d"
 
-        style.configure(".",background=PANEL,foreground=TEXT,
+        style.configure(".",background=PANEL,foreground=TEXT,font=("Segoe UI",9),
                         fieldbackground=FIELD,bordercolor=BORDER,
                         lightcolor=BORDER,darkcolor=BORDER,
                         troughcolor=FIELD2,arrowcolor=TEXT)
@@ -372,26 +372,35 @@ class Viewer(PlaybackMixin):
 
         style.configure("TLabel",background=PANEL,foreground=TEXT)
         style.configure("Panel.TLabel",background=PANEL,foreground=TEXT)
-        style.configure("Title.TLabel",background=PANEL,foreground="#ffffff",
+        style.configure("Title.TLabel",background=PANEL,foreground=TEXT,
                         font=("Segoe UI Semibold",11))
+        style.configure("Section.TLabel",background=PANEL,foreground=ACCENT,
+                        font=("Segoe UI Semibold",10))
+        style.configure("Muted.TLabel",background=PANEL,foreground=MUTED,
+                        font=("Segoe UI",8))
 
         style.configure("TLabelframe",background=PANEL,foreground=TEXT,
-                        bordercolor=BORDER,relief="solid")
-        style.configure("TLabelframe.Label",background=PANEL,foreground=TEXT)
+                        bordercolor=BORDER,lightcolor=BORDER,darkcolor=BORDER,relief="solid")
+        style.configure("TLabelframe.Label",background=PANEL,foreground=ACCENT)
 
         style.configure("TButton",background=BUTTON,foreground=TEXT,
                         bordercolor=BORDER,lightcolor=BUTTON,darkcolor=BUTTON,
-                        padding=(8,5),relief="flat")
+                        padding=(10,7),relief="flat",focuscolor=ACCENT)
         style.map("TButton",
                   background=[("active",BUTTON_HOVER),("pressed",ACCENT)],
-                  foreground=[("disabled","#68717f")])
+                  foreground=[("disabled","#718494"),("pressed","#071014")])
+        style.configure("TSeparator",background=BORDER)
+        style.configure("Treeview",background=FIELD,fieldbackground=FIELD,foreground=TEXT,
+                        rowheight=27,borderwidth=0)
+        style.map("Treeview",background=[("selected",ACCENT)],foreground=[("selected","#071014")])
+        style.configure("Treeview.Heading",background=BUTTON,foreground=TEXT,relief="flat",padding=(8,6))
 
         style.configure("TEntry",fieldbackground=FIELD,foreground=TEXT,
                         insertcolor=TEXT,bordercolor=BORDER,
                         lightcolor=BORDER,darkcolor=BORDER)
         style.map("TEntry",
                   fieldbackground=[("disabled",FIELD2)],
-                  foreground=[("disabled","#68717f")])
+                  foreground=[("disabled","#718494")])
 
         style.configure("TCombobox",fieldbackground=FIELD,background=FIELD,
                         foreground=TEXT,arrowcolor=TEXT,
@@ -399,7 +408,7 @@ class Viewer(PlaybackMixin):
         style.map("TCombobox",
                   fieldbackground=[("readonly",FIELD),("disabled",FIELD2)],
                   background=[("readonly",FIELD),("active",FIELD2)],
-                  foreground=[("readonly",TEXT),("disabled","#68717f")],
+                  foreground=[("readonly",TEXT),("disabled","#718494")],
                   selectbackground=[("readonly",FIELD)],
                   selectforeground=[("readonly",TEXT)])
 
@@ -408,19 +417,19 @@ class Viewer(PlaybackMixin):
                         bordercolor=BORDER,lightcolor=BORDER,darkcolor=BORDER)
         style.map("TSpinbox",
                   fieldbackground=[("readonly",FIELD),("disabled",FIELD2)],
-                  foreground=[("disabled","#68717f")])
+                  foreground=[("disabled","#718494")])
 
         style.configure("TCheckbutton",background=PANEL,foreground=TEXT,
                         indicatorbackground=FIELD,indicatorforeground=TEXT)
         style.map("TCheckbutton",
                   background=[("active",PANEL)],
-                  foreground=[("disabled","#68717f")])
+                  foreground=[("disabled","#718494")])
 
         style.configure("TRadiobutton",background=PANEL,foreground=TEXT,
                         indicatorbackground=FIELD,indicatorforeground=TEXT)
         style.map("TRadiobutton",
                   background=[("active",PANEL)],
-                  foreground=[("disabled","#68717f")])
+                  foreground=[("disabled","#718494")])
 
         style.configure("Horizontal.TScale",background=PANEL,troughcolor=FIELD2,
                         bordercolor=BORDER,lightcolor=BORDER,darkcolor=BORDER)
@@ -431,66 +440,66 @@ class Viewer(PlaybackMixin):
         self.root.option_add("*TCombobox*Listbox.background", FIELD)
         self.root.option_add("*TCombobox*Listbox.foreground", TEXT)
         self.root.option_add("*TCombobox*Listbox.selectBackground", ACCENT)
-        self.root.option_add("*TCombobox*Listbox.selectForeground", "#ffffff")
+        self.root.option_add("*TCombobox*Listbox.selectForeground", "#071014")
         self.root.option_add("*TCombobox*Listbox.font", ("Segoe UI", 9))
         outer=ttk.Frame(self.root,style="Dark.TFrame"); outer.pack(fill="both",expand=True,padx=10,pady=10)
         left=ttk.Frame(outer,style="Dark.TFrame"); left.pack(side="left",fill="y")
         right=ttk.Frame(outer,style="Panel.TFrame",width=465); right.pack(side="left",fill="both",expand=True,padx=(10,0))
         # Image controls live outside the picture so they never cover thermal data.
-        image_toolbar=tk.Frame(left,bg="#101216",bd=0)
+        image_toolbar=tk.Frame(left,bg="#050609",bd=0)
         image_toolbar.pack(fill="x",pady=(0,6))
         ttk.Checkbutton(image_toolbar,text="Mirror",variable=self.mirror_var,
                         command=self.render).pack(side="left",padx=(0,8))
 
         tk.Label(
-            image_toolbar,text="Rotate",bg="#101216",fg="#8f98a8",
+            image_toolbar,text="Rotate",bg="#050609",fg="#8ba1b5",
             font=("Segoe UI",8)
         ).pack(side="left")
 
         self.rotate_button=tk.Label(
-            image_toolbar,text="↻ 90°",bg="#171b22",fg="#d7dce4",
-            activebackground="#252a33",activeforeground="#ffffff",
+            image_toolbar,text="↻ 90°",bg="#15202c",fg="#d8e8ef",
+            activebackground="#293d4d",activeforeground="#ffffff",
             font=("Segoe UI Semibold",9),padx=7,pady=3,cursor="sb_h_double_arrow"
         )
         self.rotate_button.pack(side="left",padx=(5,4))
 
         self.rotation_angle_label=tk.Label(
-            image_toolbar,text="0°",bg="#101216",fg="#9ca6b5",
+            image_toolbar,text="0°",bg="#050609",fg="#98adb9",
             font=("Segoe UI",8),width=6
         )
         self.rotation_angle_label.pack(side="left")
 
         self.rotation_reset=tk.Label(
-            image_toolbar,text="Reset",bg="#171b22",fg="#aeb7c4",
+            image_toolbar,text="Reset",bg="#15202c",fg="#98adb9",
             font=("Segoe UI",8),padx=6,pady=3,cursor="hand2"
         )
         self.rotation_reset.pack(side="left",padx=(2,14))
 
         tk.Label(
-            image_toolbar,text="Window",bg="#101216",fg="#8f98a8",
+            image_toolbar,text="Window",bg="#050609",fg="#8ba1b5",
             font=("Segoe UI",8)
         ).pack(side="left")
 
         self.size_minus=tk.Label(
-            image_toolbar,text="−",bg="#171b22",fg="#d7dce4",
+            image_toolbar,text="−",bg="#15202c",fg="#d8e8ef",
             font=("Segoe UI Semibold",10),width=2,pady=2,cursor="hand2"
         )
         self.size_minus.pack(side="left",padx=(5,2))
 
         self.viewport_scale_label=tk.Label(
-            image_toolbar,text="100%",bg="#101216",fg="#d7dce4",
+            image_toolbar,text="100%",bg="#050609",fg="#d8e8ef",
             font=("Segoe UI",8),width=6
         )
         self.viewport_scale_label.pack(side="left")
 
         self.size_plus=tk.Label(
-            image_toolbar,text="+",bg="#171b22",fg="#d7dce4",
+            image_toolbar,text="+",bg="#15202c",fg="#d8e8ef",
             font=("Segoe UI Semibold",10),width=2,pady=2,cursor="hand2"
         )
         self.size_plus.pack(side="left",padx=(2,2))
 
         self.size_reset=tk.Label(
-            image_toolbar,text="100%",bg="#171b22",fg="#aeb7c4",
+            image_toolbar,text="100%",bg="#15202c",fg="#98adb9",
             font=("Segoe UI",8),padx=5,pady=3,cursor="hand2"
         )
         self.size_reset.pack(side="left",padx=(2,0))
@@ -504,24 +513,24 @@ class Viewer(PlaybackMixin):
         self.size_reset.bind("<Button-1>",lambda _e:self.set_viewport_scale(1.0))
 
         self.build_playback_controls(left)
-        self.canvas=tk.Canvas(left,width=CANVAS_W,height=CANVAS_H,bg="#050609",highlightthickness=1,highlightbackground="#30343c",cursor="crosshair"); self.canvas.pack()
+        self.canvas=tk.Canvas(left,width=CANVAS_W,height=CANVAS_H,bg="#050609",highlightthickness=1,highlightbackground="#263545",cursor="crosshair"); self.canvas.pack()
         self.image_id=self.canvas.create_image(0,0,anchor="nw")
 
         self.placeholder_id=self.canvas.create_text(
             CANVAS_W//2,CANVAS_H//2,
             text="Waiting for camera…\nReconnect USB if necessary.",
-            fill="#d9dce3",font=("Segoe UI",14),justify="center"
+            fill="#d8e8ef",font=("Segoe UI",14),justify="center"
         )
         self.canvas.bind("<Motion>",self.on_motion); self.canvas.bind("<Leave>",self.on_leave); self.canvas.bind("<Button-1>",self.add_point); self.canvas.bind("<Button-3>",self.remove_nearest)
-        tk.Label(left,textvariable=self.hover_text,bg="#101216",fg="white",font=("Segoe UI Semibold",12),anchor="w").pack(fill="x",pady=(7,0))
-        tk.Label(left,textvariable=self.scene_text,bg="#101216",fg="#b9c1ce",font=("Segoe UI",10),anchor="w").pack(fill="x")
-        tk.Label(left,textvariable=self.range_text,bg="#101216",fg="#8f98a8",font=("Segoe UI",9),anchor="w").pack(fill="x")
-        tk.Label(left,text="Left click: add measurement point  •  Right click: remove nearest point",bg="#101216",fg="#737d8d",font=("Segoe UI",9),anchor="w").pack(fill="x")
+        tk.Label(left,textvariable=self.hover_text,bg="#050609",fg="white",font=("Segoe UI Semibold",12),anchor="w").pack(fill="x",pady=(7,0))
+        tk.Label(left,textvariable=self.scene_text,bg="#050609",fg="#b7cad6",font=("Segoe UI",10),anchor="w").pack(fill="x")
+        tk.Label(left,textvariable=self.range_text,bg="#050609",fg="#8ba1b5",font=("Segoe UI",9),anchor="w").pack(fill="x")
+        tk.Label(left,text="Left click: add measurement point  •  Right click: remove nearest point",bg="#050609",fg="#8ba1b5",font=("Segoe UI",9),anchor="w").pack(fill="x")
 
         header=ttk.Frame(right,style="Panel.TFrame"); header.pack(fill="x",padx=12,pady=(10,6))
 
         self.live_dot=tk.Canvas(
-            header,width=14,height=14,bg="#191c22",
+            header,width=14,height=14,bg="#111923",
             highlightthickness=0,bd=0
         )
         self.live_dot.pack(side="left",padx=(0,5))
@@ -531,8 +540,8 @@ class Viewer(PlaybackMixin):
 
         ttk.Label(header,text="LIVE STREAM",style="Title.TLabel").pack(side="left")
         tk.Label(
-            header,textvariable=self.status,bg="#191c22",
-            fg="#75d58a",font=("Segoe UI",9),anchor="e"
+            header,textvariable=self.status,bg="#111923",
+            fg="#7fded2",font=("Segoe UI",9),anchor="e"
         ).pack(side="right",fill="x",expand=True)
 
 
@@ -541,7 +550,7 @@ class Viewer(PlaybackMixin):
         # --- Display ---------------------------------------------------------
         display_box=ttk.LabelFrame(controls,padding=(6,4))
         display_heading=ttk.Frame(display_box)
-        ttk.Label(display_heading,text="Display").pack(side="left")
+        ttk.Label(display_heading,text="DISPLAY",style="Section.TLabel").pack(side="left")
         ttk.Button(
             display_heading,text="Reset",width=6,command=self.reset_display_settings
         ).pack(side="left",padx=(8,0))
@@ -666,7 +675,7 @@ class Viewer(PlaybackMixin):
         # --- Temperature / radiometry ---------------------------------------
         temp_box=ttk.LabelFrame(controls,padding=(6,4))
         temperature_heading=ttk.Frame(temp_box)
-        ttk.Label(temperature_heading,text="Temperature / radiometry").pack(side="left")
+        ttk.Label(temperature_heading,text="TEMPERATURE / RADIOMETRY",style="Section.TLabel").pack(side="left")
         ttk.Button(
             temperature_heading,text="Reset",width=6,
             command=self.reset_temperature_settings
@@ -723,13 +732,13 @@ class Viewer(PlaybackMixin):
 
         ttk.Separator(right).pack(fill="x",padx=12,pady=2)
         ph=ttk.Frame(right,style="Panel.TFrame"); ph.pack(fill="x",padx=12,pady=(6,2))
-        ttk.Label(ph,text="MEASUREMENT POINTS",style="Title.TLabel").pack(side="left")
+        ttk.Label(ph,text="MEASUREMENT POINTS",style="Section.TLabel").pack(side="left")
 
-        tk.Label(ph,textvariable=self.graph_range_text,bg="#191c22",fg="#8f98a8",font=("Segoe UI",8)).pack(side="right")
+        tk.Label(ph,textvariable=self.graph_range_text,bg="#111923",fg="#8ba1b5",font=("Segoe UI",8)).pack(side="right")
 
         self.point_list=tk.Listbox(
-            right,height=6,bg="#111319",fg="#eef1f6",
-            selectbackground="#31577d",borderwidth=0,highlightthickness=0,
+            right,height=6,bg="#0d141e",fg="#eff5ff",
+            selectbackground="#7fded2",selectforeground="#071014",borderwidth=0,highlightthickness=0,
             font=("Consolas",10),activestyle="none"
         )
         self.point_list.pack(fill="x",padx=12)
@@ -756,13 +765,13 @@ class Viewer(PlaybackMixin):
 
         tk.Label(
             history_bar,textvariable=self.archive_size_var,
-            bg="#191c22",fg="#9aa6b5",font=("Segoe UI",8)
+            bg="#111923",fg="#98adb9",font=("Segoe UI",8)
         ).pack(side="left",padx=(10,0))
 
         self.dvr_time_var=tk.StringVar(value="Continuous archive: active")
-        tk.Label(history_bar,textvariable=self.dvr_time_var,bg="#191c22",fg="#8f98a8",font=("Segoe UI",8)).pack(side="right")
+        tk.Label(history_bar,textvariable=self.dvr_time_var,bg="#111923",fg="#8ba1b5",font=("Segoe UI",8)).pack(side="right")
 
-        self.graph=tk.Canvas(right,height=230,bg="#0e1015",highlightthickness=1,highlightbackground="#30343c")
+        self.graph=tk.Canvas(right,height=230,bg="#0d141e",highlightthickness=1,highlightbackground="#263545")
         self.graph.pack(fill="both",expand=True,padx=12,pady=(4,4))
         self.graph_image_id=self.graph.create_image(0,0,anchor="nw")
         self.graph.bind("<Motion>",self.on_graph_motion)
@@ -775,7 +784,7 @@ class Viewer(PlaybackMixin):
         self.graph.bind("<Button-5>",lambda e:self.zoom_graph_at(+1,e.x))
         self.graph.bind("<Configure>",lambda _e:self.request_graph_redraw(force=True))
         self.graph_detail_label=tk.Label(
-            right,textvariable=self.graph_detail_text,bg="#151820",fg="#e7e9ee",
+            right,textvariable=self.graph_detail_text,bg="#15202c",fg="#eff5ff",
             font=("Segoe UI",9),anchor="w",justify="left",padx=10,pady=6
         )
         self.graph_detail_label.pack(fill="x",padx=12,pady=(0,10))
@@ -1095,7 +1104,7 @@ class Viewer(PlaybackMixin):
     def open_storage_settings(self):
         win=tk.Toplevel(self.root)
         win.title("FLIR DVR Storage")
-        win.configure(bg="#191c22")
+        win.configure(bg="#111923")
         win.transient(self.root); win.grab_set(); win.resizable(False,False)
         folder_var=tk.StringVar(value=str(self.dvr_dir))
         max_var=tk.StringVar(value=f"{self.storage_max_gb:g}")
@@ -1176,7 +1185,7 @@ class Viewer(PlaybackMixin):
         ttk.Label(frm,text="Recording speed").grid(row=2,column=0,sticky="w",pady=5)
         ttk.Combobox(frm,textvariable=speed_var,values=["Max FPS","1 FPS"],
                      state="readonly",width=12).grid(row=2,column=1,sticky="w",padx=(8,0))
-        tk.Label(frm,textvariable=info_var,bg="#191c22",fg="#9aa6b5",
+        tk.Label(frm,textvariable=info_var,bg="#111923",fg="#98adb9",
                  font=("Segoe UI",9),anchor="w").grid(row=3,column=0,columnspan=3,sticky="ew",pady=(8,10))
         btns=ttk.Frame(frm,style="Panel.TFrame"); btns.grid(row=4,column=0,columnspan=3,sticky="e")
         ttk.Button(btns,text="Cancel",command=win.destroy).pack(side="right")
@@ -1596,7 +1605,7 @@ class Viewer(PlaybackMixin):
         win=tk.Toplevel(self.root)
         self.history_window=win
         win.title("FLIR ONE Gen 2 — History")
-        win.configure(bg="#101216")
+        win.configure(bg="#050609")
         win.geometry("1180x760")
         win.minsize(900,600)
 
@@ -1635,27 +1644,27 @@ class Viewer(PlaybackMixin):
         preview_frame=ttk.Frame(win,style="Dark.TFrame")
         preview_frame.pack(fill="both",expand=True,padx=10,pady=(0,8))
         self.history_preview=tk.Canvas(
-            preview_frame,bg="#050609",highlightthickness=1,highlightbackground="#30343c"
+            preview_frame,bg="#050609",highlightthickness=1,highlightbackground="#263545"
         )
         self.history_preview.pack(fill="both",expand=True)
         self.history_preview.create_text(
             430,220,text="Select a time below — the main viewer becomes the history viewer",
-            fill="#8f98a8",font=("Segoe UI",14),tags="placeholder"
+            fill="#8ba1b5",font=("Segoe UI",14),tags="placeholder"
         )
 
         self.history_status_var=tk.StringVar(
             value="Click the graph to select a time, then press Playback."
         )
         tk.Label(
-            win,textvariable=self.history_status_var,bg="#191c22",fg="#e7e9ee",
+            win,textvariable=self.history_status_var,bg="#111923",fg="#eff5ff",
             font=("Segoe UI",10),anchor="w",padx=10
         ).pack(fill="x",padx=10,pady=(0,5))
 
         graph_frame=ttk.Frame(win,style="Panel.TFrame")
         graph_frame.pack(fill="x",padx=10,pady=(0,10))
         self.history_graph=tk.Canvas(
-            graph_frame,height=190,bg="#0e1015",
-            highlightthickness=1,highlightbackground="#30343c",cursor="crosshair"
+            graph_frame,height=190,bg="#0d141e",
+            highlightthickness=1,highlightbackground="#263545",cursor="crosshair"
         )
         self.history_scroll=ttk.Scrollbar(
             graph_frame,orient="horizontal",command=self.history_graph.xview
@@ -1693,7 +1702,7 @@ class Viewer(PlaybackMixin):
         g.delete("all")
 
         if not self.history_sessions:
-            g.create_text(24,85,text="No archived frames yet.",fill="#8f98a8",
+            g.create_text(24,85,text="No archived frames yet.",fill="#8ba1b5",
                           anchor="w",font=("Segoe UI",11))
             g.configure(scrollregion=(0,0,900,190))
             return
@@ -1726,9 +1735,9 @@ class Viewer(PlaybackMixin):
         for n in range(5):
             y=top+n*(bottom-top)/4
             temp=ymax-n*(ymax-ymin)/4
-            g.create_line(left,y,1200,y,fill="#252a32")
+            g.create_line(left,y,1200,y,fill="#263545")
             g.create_text(50,y,text=f"{self.shown_temp(temp):.1f}",
-                          fill="#929aaa",anchor="e",font=("Segoe UI",8))
+                          fill="#98adb9",anchor="e",font=("Segoe UI",8))
 
         for idx,s in enumerate(self.history_sessions):
             duration=max(.001,s["end"]-s["start"])
@@ -1737,13 +1746,13 @@ class Viewer(PlaybackMixin):
             self.history_map.append((x0,x1,idx,s))
 
             fav=self.session_is_favorite(s["start"],s["end"])
-            g.create_rectangle(x0,top,x1,bottom,fill="#111820",
-                               outline="#d9b44a" if fav else "#334452",
+            g.create_rectangle(x0,top,x1,bottom,fill="#15202c",
+                               outline="#7fded2" if fav else "#263545",
                                width=2 if fav else 1)
             g.create_text(
                 x0+6,top+5,
                 text=("★ " if fav else "") + dt.datetime.fromtimestamp(s["start"]).strftime("%d %b %H:%M:%S"),
-                fill="#8fa8bb",anchor="nw",font=("Segoe UI",8)
+                fill="#98adb9",anchor="nw",font=("Segoe UI",8)
             )
 
             seg=[(t,v) for t,v in samples if s["start"]<=t<=s["end"]]
@@ -1755,24 +1764,24 @@ class Viewer(PlaybackMixin):
             if len(coords)>=4:
                 g.create_line(*coords,fill="#ffe45e",width=2,smooth=True)
 
-            g.create_line(x1,top,x1,bottom,fill="#4b5a67")
+            g.create_line(x1,top,x1,bottom,fill="#506777")
             x=x1
 
             if idx < len(self.history_sessions)-1:
                 real_gap=self.history_sessions[idx+1]["start"]-s["end"]
-                g.create_line(x,bottom-9,x+gap_width,bottom-9,fill="#596170",dash=(3,3))
+                g.create_line(x,bottom-9,x+gap_width,bottom-9,fill="#506777",dash=(3,3))
                 g.create_text(
                     x+gap_width/2,bottom-17,
                     text=self.format_span(real_gap),
-                    fill="#737d8d",anchor="s",font=("Segoe UI",7)
+                    fill="#8ba1b5",anchor="s",font=("Segoe UI",7)
                 )
                 x+=gap_width
 
-        g.create_line(left,bottom,x,bottom,fill="#596170")
+        g.create_line(left,bottom,x,bottom,fill="#506777")
         g.create_text(
             left,10,
             text=f"All recorded time • graph: {point_name or 'no point data'} • gaps compressed",
-            fill="#d8dce3",anchor="w",font=("Segoe UI Semibold",9)
+            fill="#d8e8ef",anchor="w",font=("Segoe UI Semibold",9)
         )
         g.configure(scrollregion=(0,0,max(980,x+50),190))
         self.draw_history_selection_marker()
@@ -1848,10 +1857,10 @@ class Viewer(PlaybackMixin):
         x=x0+(ts-ss["start"])/duration*(x1-x0)
         self.history_graph.create_polygon(
             x-5,18,x+5,18,x,27,
-            fill="#ffd84d",outline="#ffd84d",tags="history_selected"
+            fill="#7fded2",outline="#7fded2",tags="history_selected"
         )
         self.history_graph.create_line(
-            x,27,x,158,fill="#ffd84d",width=2,tags="history_selected"
+            x,27,x,158,fill="#7fded2",width=2,tags="history_selected"
         )
 
     def on_history_speed_changed(self,_=None):
@@ -3171,9 +3180,9 @@ class Viewer(PlaybackMixin):
         g.delete("graph_hover"); self.graph_hover_stamp=None
         w,h=max(380,g.winfo_width()),max(200,g.winfo_height())
         ml,mr,mt,mb=52,14,20,32
-        img=Image.new("RGB",(w,h),(14,16,21)); d=ImageDraw.Draw(img)
-        d.line((ml,mt,ml,h-mb),fill=(89,97,112))
-        d.line((ml,h-mb,w-mr,h-mb),fill=(89,97,112))
+        img=Image.new("RGB",(w,h),(13,20,30)); d=ImageDraw.Draw(img)
+        d.line((ml,mt,ml,h-mb),fill=(80,103,119))
+        d.line((ml,h-mb,w-mr,h-mb),fill=(80,103,119))
 
         series=[]
         if self.max_point.get("graph",True):
@@ -3252,8 +3261,8 @@ class Viewer(PlaybackMixin):
                 for n in range(5):
                     y=mt+n*(h-mt-mb)/4
                     val=ymax-n*(ymax-ymin)/4
-                    d.line((ml,y,w-mr,y),fill=(37,42,50))
-                    d.text((4,y-6),f"{self.shown_temp(val):.1f}",fill=(146,154,170))
+                    d.line((ml,y,w-mr,y),fill=(38,53,69))
+                    d.text((4,y-6),f"{self.shown_temp(val):.1f}",fill=(152,173,185))
 
                 render_series=[]
                 legend_x=ml
@@ -3266,7 +3275,7 @@ class Viewer(PlaybackMixin):
                         coords.append((x,y))
 
                     selected=(s["name"]==self.graph_selected_series)
-                    line_width=3 if selected else 2
+                    line_width=2 if selected else 1
                     if len(coords)==1:
                         x0,y0=coords[0]
                         d.ellipse((x0-2,y0-2,x0+2,y0+2),fill=s["color"])
@@ -3355,7 +3364,7 @@ class Viewer(PlaybackMixin):
         y=state["mt"]+(state["ymax"]-temp)/max(1e-9,state["ymax"]-state["ymin"])*(state["h"]-state["mt"]-state["mb"])
 
         self.graph.delete("graph_hover")
-        self.graph.create_line(x,state['mt'],x,state['h']-state['mb'],fill='#d9dde5',dash=(3,3),tags='graph_hover')
+        self.graph.create_line(x,state['mt'],x,state['h']-state['mb'],fill='#d8e8ef',dash=(3,3),tags='graph_hover')
         self.graph.create_oval(
             x-2,y-2,x+2,y+2,
             fill=series["color"],outline="",tags="graph_hover"

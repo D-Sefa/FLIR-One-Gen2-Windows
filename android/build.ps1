@@ -7,11 +7,11 @@ $platform=Join-Path $Toolchain 'platform/android-35/android.jar'
 $build=Join-Path $PSScriptRoot 'build'
 New-Item -ItemType Directory -Force -Path "$build/classes","$build/dex","$build/tests" | Out-Null
 function Check-Exit { if($LASTEXITCODE -ne 0){ throw "Build command failed: exit $LASTEXITCODE" } }
-$core=@('Protocol','FrameParser','IapSession','Thermal','RawArchive','RawRecorder','Generation') | ForEach-Object { Join-Path $PSScriptRoot "src/com/dsefa/flir/$_.java" }
+$core=@('Protocol','FrameParser','IapSession','Thermal','RawArchive','RawRecorder','Generation','OverlayModel','UsbPermissionGate','StorageBudget','GraphModel','ChromeState','FramePipeline','RecordingIndex','RecordingCatalog','CsvExport','ImageClip','ImageRecorder') | ForEach-Object { Join-Path $PSScriptRoot "src/com/dsefa/flir/$_.java" }
 $testSources=Get-ChildItem "$PSScriptRoot/tests" -Filter '*.java' | Select-Object -ExpandProperty FullName
 & "$jdk/javac.exe" -encoding UTF-8 -d "$build/tests" @core @testSources
 Check-Exit
-foreach($test in @('CoreTest','PacketRedTest','ArchiveTest','LifecycleTest','RecorderTest')) { & "$jdk/java.exe" -cp "$build/tests" "com.dsefa.flir.$test"; Check-Exit }
+foreach($test in @('CoreTest','PacketRedTest','ArchiveTest','LifecycleTest','RecorderTest','OverlayTest','PermissionTest','StorageTest','GraphTest','ChromeTest','DisplayTest','PipelineTest','RecordingIndexTest','ClipTest')) { & "$jdk/java.exe" -cp "$build/tests" "com.dsefa.flir.$test"; Check-Exit }
 $sources=Get-ChildItem "$PSScriptRoot/src" -Filter '*.java' -Recurse | Select-Object -ExpandProperty FullName
 & "$jdk/javac.exe" -encoding UTF-8 --release 8 -cp $platform -d "$build/classes" @sources
 Check-Exit
@@ -20,7 +20,7 @@ $classes=Get-ChildItem "$build/classes" -Filter '*.class' -Recurse | Select-Obje
 Check-Exit
 & "$tools/aapt2.exe" compile --dir "$PSScriptRoot/res" -o "$build/resources.zip"
 Check-Exit
-& "$tools/aapt2.exe" link -I $platform --manifest "$PSScriptRoot/AndroidManifest.xml" -R "$build/resources.zip" -o "$build/unsigned.apk"
+& "$tools/aapt2.exe" link -I $platform --manifest "$PSScriptRoot/AndroidManifest.xml" "$build/resources.zip" -o "$build/unsigned.apk"
 Check-Exit
 & "$jdk/jar.exe" uf "$build/unsigned.apk" -C "$build/dex" classes.dex
 Check-Exit

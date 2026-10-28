@@ -12,7 +12,7 @@ mobile application.
 
 The independent Android port has been tested by the project owner with his
 Gen 2 Lightning/iOS camera. Download the signed APK from the
-[Android preview release](https://github.com/D-Sefa/FLIR-One-Gen2-Windows/releases/tag/android-v0.1.0-preview).
+[Android 0.3.0 preview release](https://github.com/D-Sefa/FLIR-One-Gen2-Windows/releases/tag/android-v0.3.0-preview).
 Android 8.0+ and USB OTG are required; no root, Python, Zadig or FLIR SDK is needed.
 **Hardware modification is required for the connection tested here:** open the
 camera, remove the Lightning connector and solder a USB data cable in its place
@@ -23,10 +23,20 @@ See the [hardware prerequisite and safety notes](android/README.md#hardware-prer
 After the hardware connection is prepared, install the APK, connect the powered
 camera through USB OTG, open the app and allow Android USB access.
 
-Live thermal view, palettes/scaling, rotate/mirror, touch measurements, graphs,
-PNG export and RAW recording/playback are included. Optical/MSX is not supported.
-Other phone models are not yet verified. See the [Android guide and source](android/README.md).
-The Windows release and setup instructions below remain unchanged.
+Full-window thermal view, auto-hiding controls, palettes/scaling, rotate/mirror,
+transparent measurements and MAX graph, date-based playback and PNG export are
+included. Recording is **manual only, one rendered JPEG per second**, not new
+RAW capture. Live display remains independently full-rate/latest-frame-only.
+Saved image colours cannot be reprocessed; existing RAW imports and CSV analysis
+remain supported. Optical/MSX is not supported. Other phone models and measured
+phone FPS are not verified. See the [Android user guide](android/USER_GUIDE.md).
+
+## Matching desktop / mobile design — Windows 0.4.0
+
+Windows shares Android's deep navy surfaces, restrained mint accents, flat
+controls and thin graph lines. Desktop controls, RAW DVR/gallery, calibration,
+USB startup and capture behavior are retained; mobile-only recording and
+auto-hide choices do not replace the desktop workflows.
 
 ## Features
 
@@ -48,8 +58,16 @@ The Windows release and setup instructions below remain unchanged.
 
 ## Quick Start
 
-Download the [latest release](https://github.com/D-Sefa/FLIR-One-Gen2-Windows/releases/latest).
-This is a Python source distribution with `setup.cmd`, not a standalone EXE.
+Download the [Windows 0.4.0 release](https://github.com/D-Sefa/FLIR-One-Gen2-Windows/releases/tag/v0.4.0).
+The portable Windows ZIP contains **FLIR-One-Gen2.exe** and its dependencies:
+no Python installation is required. **First install WinUSB drivers with Zadig**
+for the three FLIR interfaces (`MI_00`, `MI_01`, `MI_02`, `VID_09CB&PID_1996`).
+Official Zadig 2.9 is included under `drivers/`, together with its source and
+license notices. Extract the entire ZIP and double-click the EXE; do not move
+the EXE out of its folder. Read the [portable guide](docs/PORTABLE_README.md).
+
+The original Python source distribution with `setup.cmd` is also available.
+The following Python installation steps apply only to that source distribution.
 When upgrading, close the viewer and rerun `setup.cmd` to install NumPy.
 Keep your existing `outputs/FLIR_DVR` folder if you want to retain recordings.
 

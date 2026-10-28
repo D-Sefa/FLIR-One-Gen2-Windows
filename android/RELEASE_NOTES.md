@@ -1,54 +1,47 @@
-# Android 0.1.0-preview
+# Android 0.3.0-preview
 
-An independent Android port of the working FLIR ONE Gen 2 Lightning/iOS
-Windows iAP2 capture. Installation and live thermal streaming were confirmed
-by the project owner on his Android phone. Other phones are not yet verified.
+Download **FLIR-Gen2-Android-0.3.0.apk**, transfer to an Android 8.0+ phone and
+install over the earlier preview. Connect the powered, modified camera through
+USB OTG and accept Android USB access. No root, Python, Zadig or FLIR SDK needed.
 
-## Download and install
+## Hardware prerequisite
 
-**Hardware prerequisite:** the working camera is modified. Reproducing the
-tested connection requires opening the Gen 2 Lightning/iOS camera, removing
-its Lightning connector and soldering a USB data cable in its place to the
-corresponding PCB USB data/ground connections. The APK is not a plug-and-play
-solution for an untouched Lightning camera or an ordinary charging adapter.
-
-This modification can damage the camera. Disconnect the battery and all power
-before soldering. Verify signals and check for shorts; do not blindly connect
-USB +5 V/VBUS to a Lightning pad or battery terminal. Camera power/charging
-must use a verified arrangement. A universal pad-by-pad pinout is not provided.
-Read the [hardware prerequisite and safety notes](https://github.com/D-Sefa/FLIR-One-Gen2-Windows/blob/main/android/README.md#hardware-prerequisite)
-before attempting the modification.
-
-Download **FLIR-Gen2-Android-preview.apk**, transfer it to your Android 8.0+
-phone and install it. Allow installation from your browser/file manager if
-Android asks. Turn on the camera and connect its suitable USB data cable
-through OTG. Open **FLIR Gen2 Thermal** and allow Android USB access.
-
-No root, Python, Zadig, network connection or FLIR SDK is required.
-The camera needs its own stable power/battery. An ordinary Lightning charging
-cable is not a substitute for the suitable data connection used by this project.
+The verified Gen 2 Lightning/iOS unit is physically modified: its Lightning
+connector is removed and a USB data cable is soldered to the PCB data/ground
+connections. An ordinary charging adapter is not a verified substitute.
+Opening/soldering can permanently damage the camera. Disconnect all power first;
+never blindly connect USB +5 V to a Lightning pad or battery terminal.
+Read [hardware prerequisites and safety](https://github.com/D-Sefa/FLIR-One-Gen2-Windows/blob/main/android/README.md#hardware-prerequisite).
 
 ## Included
 
-- Live 160x120 thermal frames through the Gen 2 iAP2/USB transport.
-- Iron, Rainbow, White-hot and Black-hot palettes; auto/linear/manual scales.
-- Tone/span, radiometry settings, reset, rotate and mirror.
-- Touch measurement points, temperature history, graph pause/zoom/time cursor.
-- PNG export, lossless RAW recording, import/export and playback.
+- Full-window navy/mint UI; four-second idle control auto-hide and first-tap reveal.
+- Transparent adaptive pin readings and MAX graph, thin axes and min/max labels.
+- Rotate/Mirror/zoom, MAX/MIN tracking, seven palettes and five scale modes.
+- Fine display/radiometry controls and separate resets; Celsius/Fahrenheit/3x3 averaging.
+- Touch graph time/temperature/age inspection, pause/pan/zoom without stopping collection.
+- Latest-only display processing; independent JPEG encoding and disk writing.
+- Manual corner **Record** button saves one rendered JPEG per second in .f1clip.
+  No new RAW recording or automatic continuous recording. Live remains independent.
+- Capture-date/calendar gallery, timeline seeking, stepping, speed and PNG export.
+- Default 1 GB recording cap, editable 100 MB–10 GB; active/playback/export protection.
+- Existing RAW imports remain reprocessable and can export temperature CSV.
 
-## Limits
+Saved JPEG colours are baked in: new clips cannot be recalibrated or recoloured
+as RAW temperature data. Desktop and phone recording formats differ.
 
-- Optical/visible and MSX are not working; this is thermal-only.
-- First preview, not full Windows feature parity; compatibility with other
-  phone models, Gen 3/Pro or arbitrary adapters is not established.
-- Temperature conversion uses approximate desktop calibration constants,
-  not laboratory calibration or medical accuracy.
-- Recording is explicit and stops when the app leaves the foreground.
-- App-private recordings must be exported before uninstalling.
-- No background camera service or automatic storage quota.
+## Limits and verification
 
-The source is in `android/` in the repository and in the attached source ZIP.
-Signing credentials are not distributed. APK v2/v3 signatures and all five
-offline Java test suites were verified before publication.
+Optical/visible/MSX remains unavailable. No background camera service. Android
+controls USB permission; duplicate requests are suppressed but a permanent grant
+cannot be forced. Other phones/cameras/adapters are not verified.
+Temperature estimates are not laboratory-calibrated or medical measurements.
+Recording stops on leaving the foreground. Export private records before uninstalling.
 
-The existing Windows release remains the latest stable release.
+All 14 JVM test programs and Android compile pass; the distributed APK's v2/v3
+signatures verify. The original signing identity is retained. Owner confirmed
+installation/live use on his modified camera and phone; this is not a quantitative
+phone FPS or universal compatibility claim.
+
+Source is in android/ and the clean source ZIP. No signing key or personal
+recordings are distributed. See [USER_GUIDE.md](USER_GUIDE.md).

@@ -157,7 +157,7 @@ class GalleryWindow:
         self.pool=ThreadPoolExecutor(max_workers=1,thread_name_prefix='flir-gallery')
         self.closed=False; self.generation=0; self.page=0; self.sessions=[]; self.photos=[]
         self.window=tk.Toplevel(viewer.root); self.window.title('Recordings — FLIR ONE')
-        self.window.geometry('940x720'); self.window.minsize(680,480); self.window.configure(bg='#101216')
+        self.window.geometry('940x720'); self.window.minsize(680,480); self.window.configure(bg='#050609')
         self.window.protocol('WM_DELETE_WINDOW',self.hide)
         top=ttk.Frame(self.window); top.pack(fill='x',padx=16,pady=12)
         ttk.Label(top,text='Recordings',font=('Segoe UI',18,'bold')).pack(side='left')
@@ -178,7 +178,7 @@ class GalleryWindow:
         self.message=tk.StringVar(value='Loading recordings…')
         ttk.Label(self.window,textvariable=self.message).pack(fill='x',padx=16,pady=(0,8))
         body=ttk.Frame(self.window); body.pack(fill='both',expand=True,padx=16)
-        self.canvas=tk.Canvas(body,bg='#101216',highlightthickness=0)
+        self.canvas=tk.Canvas(body,bg='#050609',highlightthickness=0)
         scroll=ttk.Scrollbar(body,orient='vertical',command=self.canvas.yview)
         self.canvas.configure(yscrollcommand=scroll.set); scroll.pack(side='right',fill='y'); self.canvas.pack(fill='both',expand=True)
         self.cards=ttk.Frame(self.canvas); self.cards_id=self.canvas.create_window(0,0,window=self.cards,anchor='nw')
@@ -236,7 +236,7 @@ class GalleryWindow:
                 day=session['date']
                 ttk.Label(self.cards,text=day,font=('Segoe UI',13,'bold')).grid(row=row,column=0,columnspan=3,sticky='w',pady=(14,8)); row+=1
             card=ttk.Frame(self.cards,padding=8); card.grid(row=row,column=col,sticky='nsew',padx=5,pady=5)
-            preview=tk.Label(card,text='Loading…',bg='#191c22',fg='#9ca6b5',width=23,height=10,cursor='hand2')
+            preview=tk.Label(card,text='Loading…',bg='#111923',fg='#98adb9',width=23,height=10,cursor='hand2')
             preview.pack(fill='both')
             start=dt.datetime.fromtimestamp(session['start']).strftime('%H:%M:%S')
             end=dt.datetime.fromtimestamp(session['end']).strftime('%H:%M:%S')
